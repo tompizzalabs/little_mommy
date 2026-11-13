@@ -7,9 +7,6 @@ pub enum NodeKind {
     Analog,
     Noise,
     Wave,
-    Chiptune,
-    Multi,
-    Vector,
     Fm,
     Pm,
     Mix,
@@ -109,92 +106,6 @@ const WAVE_DEFS: &[ParamDef] = &[
         name: "Det Pwr",
         min: -5.0,
         max: 5.0,
-    },
-];
-const CHIPTUNE_DEFS: &[ParamDef] = &[
-    ParamDef {
-        name: "Pos",
-        min: 0.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "Semi",
-        min: -24.0,
-        max: 24.0,
-    },
-    ParamDef {
-        name: "Detune",
-        min: -100.0,
-        max: 100.0,
-    },
-    ParamDef {
-        name: "Arp Speed",
-        min: 0.01,
-        max: 40.0,
-    },
-];
-const MULTI_DEFS: &[ParamDef] = &[
-    ParamDef {
-        name: "Pos",
-        min: 0.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "Semi",
-        min: -24.0,
-        max: 24.0,
-    },
-    ParamDef {
-        name: "Detune",
-        min: 0.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "Spread",
-        min: 0.0,
-        max: 1.0,
-    },
-];
-const VECTOR_DEFS: &[ParamDef] = &[
-    ParamDef {
-        name: "X",
-        min: 0.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "Y",
-        min: 0.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "P0",
-        min: 0.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "P1",
-        min: 0.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "P2",
-        min: 0.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "P3",
-        min: 0.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "Semi",
-        min: -24.0,
-        max: 24.0,
-    },
-    ParamDef {
-        name: "Detune",
-        min: -100.0,
-        max: 100.0,
     },
 ];
 const FM_DEFS: &[ParamDef] = &[
@@ -307,32 +218,6 @@ pub enum NodeParams {
         unison_detune: f32,
         unison_detune_power: f32,
     },
-    Chiptune {
-        table: TableSel,
-        position: f32,
-        semitones: f32,
-        detune: f32,
-        arp_enabled: bool,
-        arp_three: bool,
-        arp_speed: f32,
-        arp_steps: [i32; 3],
-        noise: bool,
-    },
-    Multi {
-        table: TableSel,
-        position: f32,
-        semitones: f32,
-        detune: f32,
-        spread: f32,
-    },
-    Vector {
-        tables: [TableSel; 4],
-        positions: [f32; 4],
-        semitones: f32,
-        detune: f32,
-        x: f32,
-        y: f32,
-    },
     Fm {
         carrier_table: TableSel,
         modulator_table: TableSel,
@@ -414,32 +299,6 @@ impl NodeParams {
                 unison_detune: 0.0,
                 unison_detune_power: 0.0,
             },
-            NodeKind::Chiptune => NodeParams::Chiptune {
-                table: wavetable::default_sel(),
-                position: 0.5,
-                semitones: 0.0,
-                detune: 0.0,
-                arp_enabled: true,
-                arp_three: true,
-                arp_speed: 20.0,
-                arp_steps: [0, 12, 7],
-                noise: false,
-            },
-            NodeKind::Multi => NodeParams::Multi {
-                table: wavetable::default_sel(),
-                position: 0.5,
-                semitones: 0.0,
-                detune: 0.2,
-                spread: 0.4,
-            },
-            NodeKind::Vector => NodeParams::Vector {
-                tables: std::array::from_fn(|_| wavetable::default_sel()),
-                positions: [0.5; 4],
-                semitones: 0.0,
-                detune: 0.0,
-                x: 0.5,
-                y: 0.5,
-            },
             NodeKind::Fm => NodeParams::Fm {
                 carrier_table: wavetable::default_sel(),
                 modulator_table: wavetable::default_sel(),
@@ -489,9 +348,6 @@ impl NodeParams {
             NodeParams::Analog { .. } => NodeKind::Analog,
             NodeParams::Noise { .. } => NodeKind::Noise,
             NodeParams::Wave { .. } => NodeKind::Wave,
-            NodeParams::Chiptune { .. } => NodeKind::Chiptune,
-            NodeParams::Multi { .. } => NodeKind::Multi,
-            NodeParams::Vector { .. } => NodeKind::Vector,
             NodeParams::Fm { .. } => NodeKind::Fm,
             NodeParams::Pm { .. } => NodeKind::Pm,
             NodeParams::Mix => NodeKind::Mix,
@@ -508,9 +364,6 @@ impl NodeParams {
             NodeParams::Analog { .. }
             | NodeParams::Noise { .. }
             | NodeParams::Wave { .. }
-            | NodeParams::Chiptune { .. }
-            | NodeParams::Multi { .. }
-            | NodeParams::Vector { .. }
             | NodeParams::Fm { .. }
             | NodeParams::Pm { .. }
             | NodeParams::Lfo { .. } => 0,
@@ -527,9 +380,6 @@ impl NodeParams {
             NodeKind::Analog => "ANALOG",
             NodeKind::Noise => "NOISE",
             NodeKind::Wave => "WAVE",
-            NodeKind::Chiptune => "CHIPTUNE",
-            NodeKind::Multi => "MULTI",
-            NodeKind::Vector => "VECTOR",
             NodeKind::Fm => "FM",
             NodeKind::Pm => "PM",
             NodeKind::Mix => "MIX",
@@ -546,9 +396,6 @@ impl NodeParams {
             NodeParams::Analog { .. } => ANALOG_DEFS,
             NodeParams::Noise { .. } => NOISE_DEFS,
             NodeParams::Wave { .. } => WAVE_DEFS,
-            NodeParams::Chiptune { .. } => CHIPTUNE_DEFS,
-            NodeParams::Multi { .. } => MULTI_DEFS,
-            NodeParams::Vector { .. } => VECTOR_DEFS,
             NodeParams::Fm { .. } => FM_DEFS,
             NodeParams::Pm { .. } => PM_DEFS,
             NodeParams::Mix => EMPTY_DEFS,
@@ -595,22 +442,6 @@ impl NodeParams {
                 },
                 8,
             ) => *unison_detune_power,
-            (NodeParams::Chiptune { position, .. }, 0) => *position,
-            (NodeParams::Chiptune { semitones, .. }, 1) => *semitones,
-            (NodeParams::Chiptune { detune, .. }, 2) => *detune,
-            (NodeParams::Chiptune { arp_speed, .. }, 3) => *arp_speed,
-            (NodeParams::Multi { position, .. }, 0) => *position,
-            (NodeParams::Multi { semitones, .. }, 1) => *semitones,
-            (NodeParams::Multi { detune, .. }, 2) => *detune,
-            (NodeParams::Multi { spread, .. }, 3) => *spread,
-            (NodeParams::Vector { x, .. }, 0) => *x,
-            (NodeParams::Vector { y, .. }, 1) => *y,
-            (NodeParams::Vector { positions, .. }, 2) => positions[0],
-            (NodeParams::Vector { positions, .. }, 3) => positions[1],
-            (NodeParams::Vector { positions, .. }, 4) => positions[2],
-            (NodeParams::Vector { positions, .. }, 5) => positions[3],
-            (NodeParams::Vector { semitones, .. }, 6) => *semitones,
-            (NodeParams::Vector { detune, .. }, 7) => *detune,
             (
                 NodeParams::Fm {
                     carrier_position, ..
@@ -689,22 +520,6 @@ impl NodeParams {
                 },
                 8,
             ) => *unison_detune_power = v,
-            (NodeParams::Chiptune { position, .. }, 0) => *position = v,
-            (NodeParams::Chiptune { semitones, .. }, 1) => *semitones = v,
-            (NodeParams::Chiptune { detune, .. }, 2) => *detune = v,
-            (NodeParams::Chiptune { arp_speed, .. }, 3) => *arp_speed = v,
-            (NodeParams::Multi { position, .. }, 0) => *position = v,
-            (NodeParams::Multi { semitones, .. }, 1) => *semitones = v,
-            (NodeParams::Multi { detune, .. }, 2) => *detune = v,
-            (NodeParams::Multi { spread, .. }, 3) => *spread = v,
-            (NodeParams::Vector { x, .. }, 0) => *x = v,
-            (NodeParams::Vector { y, .. }, 1) => *y = v,
-            (NodeParams::Vector { positions, .. }, 2) => positions[0] = v,
-            (NodeParams::Vector { positions, .. }, 3) => positions[1] = v,
-            (NodeParams::Vector { positions, .. }, 4) => positions[2] = v,
-            (NodeParams::Vector { positions, .. }, 5) => positions[3] = v,
-            (NodeParams::Vector { semitones, .. }, 6) => *semitones = v,
-            (NodeParams::Vector { detune, .. }, 7) => *detune = v,
             (
                 NodeParams::Fm {
                     carrier_position, ..

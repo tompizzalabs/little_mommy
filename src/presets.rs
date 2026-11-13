@@ -196,54 +196,6 @@ fn bass_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn chiptune_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
-    vec![
-        (
-            0,
-            NodeParams::Chiptune {
-                table: TableSel::Stock(StockTable::Morph),
-                position: 0.2,
-                semitones: 0.0,
-                detune: 0.0,
-                arp_enabled: true,
-                arp_three: true,
-                arp_speed: 12.0,
-                arp_steps: [0, 12, 7],
-                noise: false,
-            },
-            InputSel::None,
-            InputSel::None,
-        ),
-        (
-            1,
-            NodeParams::Filter {
-                cutoff: 6000.0,
-                resonance: 0.1,
-            },
-            InputSel::Slot(0),
-            InputSel::None,
-        ),
-        (
-            2,
-            NodeParams::Env {
-                attack: 2.0,
-                decay: 120.0,
-                sustain: 0.9,
-                release: 150.0,
-            },
-            InputSel::Slot(1),
-            InputSel::None,
-        ),
-        (
-            3,
-            NodeParams::Gain { gain: 0.7 },
-            InputSel::Slot(2),
-            InputSel::None,
-        ),
-        (4, NodeParams::Out, InputSel::Slot(3), InputSel::None),
-    ]
-}
-
 fn fm_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
@@ -305,11 +257,6 @@ pub fn factory_presets() -> Vec<Preset> {
             name: "Bass",
             cells: bass_cells(),
             play_mode: PlayMode::MonoLegato,
-        },
-        Preset {
-            name: "Chiptune",
-            cells: chiptune_cells(),
-            play_mode: PlayMode::Poly,
         },
         Preset {
             name: "FM Bells",

@@ -1,8 +1,12 @@
 use super::wavetable::{TableSource, WtVoice};
-use crate::engine::arpeggiator::pitch_shift_multiplier;
 
 /// Odin `EXP_FM_SEMITONES`.
 pub const EXP_FM_SEMITONES: f32 = 24.0;
+
+#[inline]
+pub fn pitch_shift_multiplier(semitones: f32) -> f32 {
+    (0.057_762_265 * semitones).exp()
+}
 
 #[derive(Debug, Clone)]
 pub struct FmState {

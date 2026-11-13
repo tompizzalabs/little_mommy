@@ -1,9 +1,9 @@
 use super::theme as th;
-use crate::engine::arpeggiator::pitch_shift_multiplier;
 use crate::engine::dsp;
 use crate::engine::lfo::LfoShape;
 use crate::engine::osc::analog::SQUARE_VOLUME_SCALAR;
 use crate::engine::osc::analog::analog_tables::{self, TABLE_LEN, table_index};
+use crate::engine::osc::fm::pitch_shift_multiplier;
 use crate::engine::osc::wavetable::TableSource;
 use crate::engine::osc::{AnalogShape, NoiseColor, NoiseState};
 use egui::{Color32, Pos2, Rect, Sense, Shape, Stroke, pos2, vec2};
@@ -177,70 +177,6 @@ pub fn preview_wave(
     });
 }
 
-pub fn preview_chiptune(
-    ui: &mut egui::Ui,
-    width: f32,
-    color: Color32,
-    source: &TableSource,
-    position: f32,
-    noise_mode: bool,
-) {
-    const STEPS: usize = 12;
-    if noise_mode {
-        let mut hold = [0.0f32; STEPS + 1];
-        for (i, v) in hold.iter_mut().enumerate() {
-            *v = ((hash_noise(i as u32) & 15) as f32 - 8.0) * 0.125;
-        }
-        wave_preview(ui, width, color, move |t| {
-            hold[((t * STEPS as f32) as usize).min(STEPS)]
-        });
-    } else {
-        wave_preview(ui, width, color, |t| source.sample(t, position));
-    }
-}
-
-pub fn preview_multi(
-    ui: &mut egui::Ui,
-    width: f32,
-    color: Color32,
-    source: &TableSource,
-    position: f32,
-    spread: f32,
-) {
-    const OFFSETS: [f32; 4] = [-1.5, -0.5, 0.5, 1.5];
-    let half = spread * 0.5;
-    let p: [f32; 4] = std::array::from_fn(|i| (position + OFFSETS[i] * half).clamp(0.0, 1.0));
-    wave_preview(ui, width, color, move |t| {
-        (source.sample(t, p[0])
-            + source.sample(t, p[1])
-            + source.sample(t, p[2])
-            + source.sample(t, p[3]))
-            * 0.25
-    });
-}
-
-pub fn preview_vector(
-    ui: &mut egui::Ui,
-    width: f32,
-    color: Color32,
-    sources: &[TableSource; 4],
-    positions: [f32; 4],
-    x: f32,
-    y: f32,
-) {
-    let x = x.clamp(0.0, 1.0);
-    let y = y.clamp(0.0, 1.0);
-    let ix = 1.0 - x;
-    let iy = 1.0 - y;
-    wave_preview(ui, width, color, move |t| {
-        let lower =
-            ix * sources[0].sample(t, positions[0]) + x * sources[3].sample(t, positions[3]);
-        let upper =
-            ix * sources[1].sample(t, positions[1]) + x * sources[2].sample(t, positions[2]);
-        iy * lower + y * upper
-    });
-}
-
 #[allow(clippy::too_many_arguments)]
 pub fn preview_fm(
     ui: &mut egui::Ui,
@@ -305,14 +241,6 @@ pub fn preview_noise(
     let mut state = NoiseState::default();
     state.seed(seed.wrapping_mul(0x9E37_79B9));
     wave_preview(ui, width, color, move |_| state.sample(noise_color));
-}
-
-#[inline(always)]
-fn hash_noise(mut x: u32) -> u32 {
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    x
 }
 
 pub fn preview_env(

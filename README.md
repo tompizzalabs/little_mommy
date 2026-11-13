@@ -4,15 +4,28 @@
 <img width="1040" height="660" alt="image" src="https://github.com/user-attachments/assets/ba8cbceb-7342-493d-94c6-b7bf46bf80ce" />
 
 
-
 # WARNING
 If you make **Big Daddy V** in response to this synth,
 I'll break your ribs and ass bone ( not a threat )
 
 ## Feature status
 
-There are no reading and writing presets, at the moment presets we have are just hardcoded
-First we want to focus on stabilizing the generation engine, there are still a lot of upgrades and expansions to be made
+
+### Oscillators
+
+Analog - very simple, does their job nicely but they can have a BIG upgrade
+
+FM - Does the job nicely, but needs serious upgrades too
+
+PM - Potential for some crazy, but you gotta tinker..
+
+Wavetable - He didn't start well, but we have ideas on how to make him a NUKE
+
+### Presets
+There are no reading and writing presets, at the moment presets we have are just hardcoded, preset part 
+
+First we want to focus on stabilizing the generation enginethere are still a lot of upgrades and expansions to be made
+
 So making preset stuff for now is not feasible, they will break too often
 
 

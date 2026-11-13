@@ -3,13 +3,10 @@
 use crate::engine::node::{NodeKind, NodeParams};
 use crate::engine::osc::{StockTable, TableSel};
 
-pub const KIND_LIST: [NodeKind; 14] = [
+pub const KIND_LIST: [NodeKind; 11] = [
     NodeKind::Analog,
     NodeKind::Noise,
     NodeKind::Wave,
-    NodeKind::Chiptune,
-    NodeKind::Multi,
-    NodeKind::Vector,
     NodeKind::Fm,
     NodeKind::Pm,
     NodeKind::Mix,
@@ -26,9 +23,6 @@ pub fn kind_color(params: Option<&NodeParams>) -> egui::Color32 {
         Some(NodeKind::Analog) => egui::Color32::from_rgb(70, 110, 170),
         Some(NodeKind::Noise) => egui::Color32::from_rgb(110, 110, 118),
         Some(NodeKind::Wave) => egui::Color32::from_rgb(120, 90, 165),
-        Some(NodeKind::Chiptune) => egui::Color32::from_rgb(200, 110, 70),
-        Some(NodeKind::Multi) => egui::Color32::from_rgb(140, 130, 110),
-        Some(NodeKind::Vector) => egui::Color32::from_rgb(110, 120, 200),
         Some(NodeKind::Fm) => egui::Color32::from_rgb(180, 100, 130),
         Some(NodeKind::Pm) => egui::Color32::from_rgb(160, 110, 190),
         Some(NodeKind::Mix) => egui::Color32::from_rgb(80, 140, 95),
@@ -47,9 +41,6 @@ pub fn kind_label(kind: Option<NodeKind>) -> String {
             NodeKind::Analog => "ANALOG",
             NodeKind::Noise => "NOISE",
             NodeKind::Wave => "WAVE",
-            NodeKind::Chiptune => "CHIPTUNE",
-            NodeKind::Multi => "MULTI",
-            NodeKind::Vector => "VECTOR",
             NodeKind::Fm => "FM",
             NodeKind::Pm => "PM",
             NodeKind::Mix => "MIX",

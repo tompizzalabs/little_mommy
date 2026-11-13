@@ -16,7 +16,6 @@ pub struct Knob<'a> {
     default: Option<f32>,
     bipolar: bool,
     depth: Option<&'a mut f32>,
-    integer: bool,
     formatter: Option<fn(f32) -> String>,
 }
 
@@ -32,7 +31,6 @@ impl<'a> Knob<'a> {
             default: None,
             bipolar: min < 0.0 && max > 0.0,
             depth: None,
-            integer: false,
             formatter: None,
         }
     }
@@ -57,10 +55,6 @@ impl<'a> Knob<'a> {
         self.bipolar = b;
         self
     }
-    pub fn integer(mut self, i: bool) -> Self {
-        self.integer = i;
-        self
-    }
     pub fn depth(mut self, d: Option<&'a mut f32>) -> Self {
         self.depth = Some(d).flatten();
         self
@@ -79,9 +73,6 @@ impl<'a> Knob<'a> {
             let speed = if fine { 0.16 } else { 1.0 };
             let d = (-delta.y + delta.x) * speed / 190.0;
             value = (value + d * span).clamp(self.min, self.max);
-            if self.integer {
-                value = value.round();
-            }
         }
         if resp.double_clicked() {
             if let Some(d) = self.default {
@@ -148,7 +139,7 @@ impl<'a> Knob<'a> {
 
         let text = match self.formatter {
             Some(f) => f(value),
-            None => fmt_param(self.label, value, self.min, self.max, self.integer),
+            None => fmt_param(self.label, value, self.min, self.max),
         };
         painter.text(
             pos2(center.x, rect.top() + self.size + 7.0),
@@ -222,10 +213,10 @@ impl<'a> Knob<'a> {
     }
 }
 
-pub fn fmt_param(name: &str, v: f32, min: f32, max: f32, integer: bool) -> String {
+pub fn fmt_param(name: &str, v: f32, min: f32, max: f32) -> String {
     let n = name.to_ascii_lowercase();
     let span = max - min;
-    if integer || span >= 999.0 {
+    if span >= 999.0 {
         if v.abs() >= 1000.0 {
             return format!("{:.2}k", v / 1000.0);
         }
@@ -470,83 +461,6 @@ pub fn stepper(
         egui::FontId::proportional(11.0),
         accent,
     );
-    changed
-}
-
-pub fn xy_pad(
-    ui: &mut egui::Ui,
-    _id: &str,
-    x: &mut f32,
-    y: &mut f32,
-    size: f32,
-    accent: Color32,
-) -> bool {
-    let (rect, mut resp) = ui.allocate_exact_size(vec2(size, size), Sense::click_and_drag());
-    let mut changed = false;
-    if resp.dragged() {
-        let d = resp.drag_delta();
-        let nx = (*x + d.x / size).clamp(0.0, 1.0);
-        let ny = (*y - d.y / size).clamp(0.0, 1.0);
-        if (nx - *x).abs() > f32::EPSILON || (ny - *y).abs() > f32::EPSILON {
-            *x = nx;
-            *y = ny;
-            changed = true;
-            resp.mark_changed();
-        }
-    }
-    if resp.double_clicked() {
-        *x = 0.5;
-        *y = 0.5;
-        changed = true;
-        resp.mark_changed();
-    }
-    let p = ui.painter();
-    p.rect_filled(rect, 4.0, th::INSET_BG);
-    for i in 1..4 {
-        let f = i as f32 / 4.0;
-        p.line_segment(
-            [
-                pos2(rect.left() + rect.width() * f, rect.top()),
-                pos2(rect.left() + rect.width() * f, rect.bottom()),
-            ],
-            Stroke::new(1.0, th::GRID_LINE),
-        );
-        p.line_segment(
-            [
-                pos2(rect.left(), rect.top() + rect.height() * f),
-                pos2(rect.right(), rect.top() + rect.height() * f),
-            ],
-            Stroke::new(1.0, th::GRID_LINE),
-        );
-    }
-    p.rect_stroke(
-        rect,
-        4.0,
-        Stroke::new(
-            1.0,
-            if resp.hovered() {
-                th::alpha(accent, 130)
-            } else {
-                th::INSET_EDGE
-            },
-        ),
-        egui::StrokeKind::Inside,
-    );
-    let dot = pos2(
-        rect.left() + rect.width() * *x,
-        rect.bottom() - rect.height() * *y,
-    );
-    p.line_segment(
-        [pos2(dot.x, rect.top()), pos2(dot.x, rect.bottom())],
-        Stroke::new(1.0, th::alpha(accent, 70)),
-    );
-    p.line_segment(
-        [pos2(rect.left(), dot.y), pos2(rect.right(), dot.y)],
-        Stroke::new(1.0, th::alpha(accent, 70)),
-    );
-    p.circle_filled(dot, 7.0, th::alpha(accent, 40));
-    p.circle_filled(dot, 3.4, accent);
-    p.circle_filled(dot, 1.3, th::POINTER);
     changed
 }
 

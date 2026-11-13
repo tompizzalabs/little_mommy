@@ -247,7 +247,6 @@ pub struct CompiledNode {
     pub params: NodeParams,
     pub inputs: [Option<u32>; 2],
     pub table_source: Option<TableSource>,
-    pub vector_sources: [Option<TableSource>; 4],
     pub pair_sources: [Option<TableSource>; 2],
     pub mod_links: Vec<ModLink>,
 }
@@ -311,17 +310,9 @@ impl CompiledGraph {
                 }
             }
 
-            let (table_source, vector_sources, pair_sources) = match &source.params {
-                NodeParams::Wave { table, .. } => (Some(wavetable::resolve(table, library)), Default::default(), Default::default()),
-                NodeParams::Chiptune { table, .. } | NodeParams::Multi { table, .. } => {
-                    (Some(wavetable::resolve(table, library)), Default::default(), Default::default())
-                }
-                NodeParams::Vector { tables, .. } => {
-                    let mut v: [Option<TableSource>; 4] = Default::default();
-                    for (i, t) in tables.iter().enumerate() {
-                        v[i] = Some(wavetable::resolve(t, library));
-                    }
-                    (None, v, Default::default())
+            let (table_source, pair_sources) = match &source.params {
+                NodeParams::Wave { table, .. } => {
+                    (Some(wavetable::resolve(table, library)), Default::default())
                 }
                 NodeParams::Fm {
                     carrier_table,
@@ -334,20 +325,18 @@ impl CompiledGraph {
                     ..
                 } => (
                     None,
-                    Default::default(),
                     [
                         Some(wavetable::resolve(carrier_table, library)),
                         Some(wavetable::resolve(modulator_table, library)),
                     ],
                 ),
-                _ => (None, Default::default(), Default::default()),
+                _ => (None, Default::default()),
             };
 
             nodes.push(CompiledNode {
                 params: source.params.clone(),
                 inputs,
                 table_source,
-                vector_sources,
                 pair_sources,
                 mod_links,
             });

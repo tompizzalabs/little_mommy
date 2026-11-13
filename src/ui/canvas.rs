@@ -18,8 +18,6 @@ const CULL_PAD: egui::Vec2 = vec2(40.0, 140.0);
 const HIT_MOD_SQ: f32 = 64.0;
 const HIT_PORT_SQ: f32 = 121.0;
 
-const VECTOR_IDS: [&str; 4] = ["vec_t0", "vec_t1", "vec_t2", "vec_t3"];
-const EDGE_PREFIX: [&str; 4] = ["E0  ", "E1  ", "E2  ", "E3  "];
 const VOICE_OPTIONS: [(u8, &str); 5] = [(1, "1"), (2, "2"), (4, "4"), (8, "8"), (16, "16")];
 
 struct PaletteEntry {
@@ -761,97 +759,6 @@ fn kind_controls(
         NodeParams::Lfo { shape, .. } => {
             *dirty |= shape::wave_shape_picker(ui, "lfo_shape", shape, &LfoShape::ALL, accent);
             preview::preview_lfo(ui, BODY_W, accent, *shape);
-        }
-        NodeParams::Chiptune {
-            table,
-            position,
-            arp_enabled,
-            arp_three,
-            arp_steps,
-            noise,
-            ..
-        } => {
-            *dirty |= table_picker(ui, "chip_table", table, lib, "");
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing = vec2(4.0, 0.0);
-                *dirty |= knob::chip(ui, "chip_arp", arp_enabled, "ARP", accent);
-                *dirty |= knob::chip(ui, "chip_three", arp_three, "3-STEP", accent);
-                *dirty |= knob::chip(ui, "chip_noise", noise, "NOISE", accent);
-            });
-            let src = wavetable::resolve(table, lib);
-            preview::preview_chiptune(ui, BODY_W, accent, &src, *position, *noise);
-            knob::section_label(ui, "ARP STEPS · SEMITONES");
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-                for (i, step) in arp_steps.iter_mut().enumerate() {
-                    let mut v = *step as f32;
-                    let label = ["1", "2", "3", "4", "5", "6", "7", "8"][i.min(7)];
-                    let out = Knob::new(&mut v, -24.0, 24.0)
-                        .accent(accent)
-                        .size(28.0)
-                        .label(label)
-                        .integer(true)
-                        .default(0.0)
-                        .ui(ui);
-                    if out.response.changed() {
-                        *step = v.round() as i32;
-                        *dirty = true;
-                    }
-                }
-            });
-        }
-        NodeParams::Multi {
-            table,
-            position,
-            spread,
-            ..
-        } => {
-            *dirty |= table_picker(ui, "multi_table", table, lib, "");
-            let src = wavetable::resolve(table, lib);
-            preview::preview_multi(ui, BODY_W, accent, &src, *position, *spread);
-        }
-        NodeParams::Vector {
-            tables,
-            positions: table_pos,
-            x,
-            y,
-            ..
-        } => {
-            for (edge, table) in tables.iter_mut().enumerate() {
-                *dirty |= table_picker(ui, VECTOR_IDS[edge], table, lib, EDGE_PREFIX[edge]);
-            }
-            let sources = std::array::from_fn(|i| wavetable::resolve(&tables[i], lib));
-            preview::preview_vector(ui, BODY_W, accent, &sources, *table_pos, *x, *y);
-            knob::section_label(ui, "VECTOR PAD · DRAG");
-            ui.horizontal(|ui| {
-                *dirty |= knob::xy_pad(ui, "vec_pad", x, y, 74.0, accent);
-                ui.add_space(8.0);
-                ui.vertical(|ui| {
-                    ui.spacing_mut().item_spacing = vec2(2.0, 4.0);
-                    let mut xv = *x;
-                    let mut yv = *y;
-                    let ox = Knob::new(&mut xv, 0.0, 1.0)
-                        .accent(accent)
-                        .size(28.0)
-                        .label("X")
-                        .default(0.5)
-                        .ui(ui);
-                    let oy = Knob::new(&mut yv, 0.0, 1.0)
-                        .accent(accent)
-                        .size(28.0)
-                        .label("Y")
-                        .default(0.5)
-                        .ui(ui);
-                    if ox.response.changed() {
-                        *x = xv;
-                        *dirty = true;
-                    }
-                    if oy.response.changed() {
-                        *y = yv;
-                        *dirty = true;
-                    }
-                });
-            });
         }
         NodeParams::Fm {
             carrier_table,

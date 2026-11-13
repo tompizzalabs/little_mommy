@@ -1,8 +1,8 @@
 use crate::engine::{
     lfo::{LfoShape, LfoState},
     osc::{
-        AnalogShape, AnalogVoiceState, ChiptuneState, FmState, MAX_UNISON_VOICES, MultiState,
-        NoiseColor, PmState, TableSource, VectorState, aa, noise, unison,
+        AnalogShape, AnalogVoiceState, FmState, MAX_UNISON_VOICES, NoiseColor, PmState,
+        TableSource, aa, noise, unison,
     },
 };
 
@@ -29,9 +29,6 @@ pub struct NodeState {
     pub env_stage: EnvStage,
     pub env_value: f32,
     pub lfo: LfoState,
-    pub chiptune: ChiptuneState,
-    pub multi: MultiState,
-    pub vector: VectorState,
     pub fm: FmState,
     pub pm: PmState,
 }
@@ -50,9 +47,6 @@ impl Default for NodeState {
             env_stage: EnvStage::Done,
             env_value: 0.0,
             lfo: LfoState::default(),
-            chiptune: ChiptuneState::default(),
-            multi: MultiState::default(),
-            vector: VectorState::default(),
             fm: FmState::default(),
             pm: PmState::default(),
         }
@@ -230,58 +224,6 @@ impl NodeState {
     }
     pub fn lfo(&mut self, shape: LfoShape, rate: f32, phase_offset: f32, sample_rate: f32) -> f32 {
         self.lfo.next(shape, rate, phase_offset, sample_rate)
-    }
-
-    /// Chiptune: wavetable or 1-bit noise, arpeggiated pitch. Mono (duplicated).
-    pub fn chiptune(
-        &mut self,
-        source: &TableSource,
-        freq: f32,
-        sample_rate: f32,
-        position: f32,
-    ) -> (f32, f32) {
-        let mono = self.chiptune.next(source, freq, sample_rate, position);
-        (mono, mono)
-    }
-
-    /// Multi oscillator: four voices of the same table spread across the morph
-    /// axis. Mono (duplicated).
-    pub fn multi(
-        &mut self,
-        source: &TableSource,
-        freq: f32,
-        sample_rate: f32,
-        position: f32,
-        detune: f32,
-        spread: f32,
-    ) -> (f32, f32) {
-        let mono = self
-            .multi
-            .next(source, freq, sample_rate, position, detune, spread);
-        (mono, mono)
-    }
-
-    /// Vector oscillator: four tables on the XY pad edges. Mono (duplicated).
-    #[allow(clippy::too_many_arguments)]
-    pub fn vector(
-        &mut self,
-        s0: &TableSource,
-        s1: &TableSource,
-        s2: &TableSource,
-        s3: &TableSource,
-        p0: f32,
-        p1: f32,
-        p2: f32,
-        p3: f32,
-        freq: f32,
-        sample_rate: f32,
-        x: f32,
-        y: f32,
-    ) -> (f32, f32) {
-        let mono = self
-            .vector
-            .next(s0, s1, s2, s3, p0, p1, p2, p3, freq, sample_rate, x, y);
-        (mono, mono)
     }
 
     /// FM oscillator: modulator feeds the carrier frequency. Mono (duplicated).

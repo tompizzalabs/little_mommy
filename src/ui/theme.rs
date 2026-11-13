@@ -26,7 +26,7 @@ pub const TEXT_FAINT: Color32 = Color32::from_rgb(96, 96, 106);
 pub const AUDIO: Color32 = Color32::from_rgb(240, 52, 44);
 pub const MOD: Color32 = Color32::from_rgb(38, 214, 122);
 pub const GATE: Color32 = Color32::from_rgb(255, 176, 32);
-pub const PHASE: Color32 = Color32::from_rgb(176, 108, 255);
+
 pub const CV: Color32 = Color32::from_rgb(41, 182, 255);
 pub const WARN: Color32 = Color32::from_rgb(255, 138, 40);
 
@@ -62,7 +62,6 @@ pub fn accent_for(params: Option<&NodeParams>) -> Color32 {
     match params {
         Some(NodeParams::Env { .. } | NodeParams::Lfo { .. }) => MOD,
         Some(NodeParams::Noise { .. }) => GATE,
-        Some(NodeParams::Vector { .. } | NodeParams::Multi { .. }) => PHASE,
         Some(NodeParams::Fm { .. } | NodeParams::Pm { .. }) => CV,
         None => TEXT_FAINT,
         _ => super::widgets::kind_color(params),
@@ -339,11 +338,8 @@ pub enum Glyph {
     Noise,
     Env,
     Lfo,
-    Vector,
-    Multi,
     Fm,
     Pm,
-    Chip,
     Table,
     Generic,
 }
@@ -354,9 +350,6 @@ pub fn glyph_for(params: Option<&NodeParams>) -> Glyph {
         Some(NodeParams::Noise { .. }) => Glyph::Noise,
         Some(NodeParams::Wave { .. }) => Glyph::Table,
         Some(NodeParams::Lfo { .. }) => Glyph::Lfo,
-        Some(NodeParams::Chiptune { .. }) => Glyph::Chip,
-        Some(NodeParams::Multi { .. }) => Glyph::Multi,
-        Some(NodeParams::Vector { .. }) => Glyph::Vector,
         Some(NodeParams::Fm { .. }) => Glyph::Fm,
         Some(NodeParams::Pm { .. }) => Glyph::Pm,
         Some(NodeParams::Env { .. }) => Glyph::Env,
@@ -401,20 +394,6 @@ pub fn draw_glyph(painter: &egui::Painter, rect: Rect, glyph: Glyph, color: Colo
             ],
             stroke,
         ),
-        Glyph::Chip => Shape::line(
-            vec![
-                p(0.0, 1.0),
-                p(0.0, 0.1),
-                p(0.25, 0.1),
-                p(0.25, 0.9),
-                p(0.5, 0.9),
-                p(0.5, 0.2),
-                p(0.75, 0.2),
-                p(0.75, 0.8),
-                p(1.0, 0.8),
-            ],
-            stroke,
-        ),
         Glyph::Noise => Shape::line(
             vec![
                 p(0.0, 0.7),
@@ -440,20 +419,6 @@ pub fn draw_glyph(painter: &egui::Painter, rect: Rect, glyph: Glyph, color: Colo
             ],
             stroke,
         ),
-        Glyph::Multi => {
-            let mut v = Vec::with_capacity(3);
-            for k in 0..3 {
-                let off = (k as f32 - 1.0) * 0.22;
-                v.push(Shape::line(
-                    wave(
-                        &|t| ((t + off * 0.12) * std::f32::consts::TAU).sin() * 0.6 + off * 0.5,
-                        20,
-                    ),
-                    Stroke::new(width, alpha(color, if k == 1 { 255 } else { 110 })),
-                ));
-            }
-            Shape::Vec(v)
-        }
         Glyph::Table => {
             let mut v = Vec::with_capacity(3);
             for k in 0..3 {
@@ -479,23 +444,6 @@ pub fn draw_glyph(painter: &egui::Painter, rect: Rect, glyph: Glyph, color: Colo
             ),
             stroke,
         ),
-        Glyph::Vector => Shape::Vec(vec![
-            Shape::rect_stroke(
-                r,
-                2.0,
-                Stroke::new(width, alpha(color, 120)),
-                egui::StrokeKind::Inside,
-            ),
-            Shape::line_segment(
-                [p(0.5, 0.0), p(0.5, 1.0)],
-                Stroke::new(1.0, alpha(color, 70)),
-            ),
-            Shape::line_segment(
-                [p(0.0, 0.5), p(1.0, 0.5)],
-                Stroke::new(1.0, alpha(color, 70)),
-            ),
-            Shape::circle_filled(p(0.68, 0.32), 2.4, color),
-        ]),
         Glyph::Generic => Shape::Vec(vec![
             Shape::circle_stroke(r.center(), r.height() * 0.42, stroke),
             Shape::circle_filled(r.center(), 1.8, color),

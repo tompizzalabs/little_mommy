@@ -60,22 +60,6 @@ impl Voice {
                 ((seed_base.wrapping_add(index as u32) % 991) as f32) / 991.0 * 512.0;
             state.lfo.sh_value =
                 ((seed_base.wrapping_add(index as u32 * 3) % 401) as f32) / 401.0 * 2.0 - 1.0;
-            state.chiptune.seed(fastrand::Rng::with_seed(
-                seed_base
-                    .wrapping_mul(0x51_7C_C1_B7)
-                    .wrapping_add(index as u32 * 0x1B873593) as u64,
-            ));
-            state.multi.voices[0].phase =
-                ((seed_base.wrapping_add(index as u32) % 977) as f32) / 977.0;
-            state.multi.voices[1].phase =
-                ((seed_base.wrapping_add(index as u32 * 3) % 977) as f32) / 977.0;
-            state.multi.voices[2].phase =
-                ((seed_base.wrapping_add(index as u32 * 5) % 977) as f32) / 977.0;
-            state.multi.voices[3].phase =
-                ((seed_base.wrapping_add(index as u32 * 7) % 977) as f32) / 977.0;
-            state.vector.voice.phase =
-                ((seed_base.wrapping_add(index as u32) % 983) as f32) / 983.0;
-            state.vector.snap_xy(0.5, 0.5);
             state.fm.carrier.phase = ((seed_base.wrapping_add(index as u32) % 971) as f32) / 971.0;
             state.fm.modulator.phase =
                 ((seed_base.wrapping_add(index as u32 * 11) % 971) as f32) / 971.0;
@@ -221,60 +205,6 @@ impl Voice {
                             udp,
                         ),
                         None => (0.0, 0.0),
-                    }
-                }
-                NodeParams::Chiptune { .. } => {
-                    let pos = modulated(&node.params, links, &mod_values, 0);
-                    let semis = modulated(&node.params, links, &mod_values, 1);
-                    let det = modulated(&node.params, links, &mod_values, 2);
-                    let arp_speed = modulated(&node.params, links, &mod_values, 3);
-                    let freq = base_freq * semitone_ratio(semis) * cent_ratio(det);
-                    if let NodeParams::Chiptune {
-                        arp_enabled,
-                        arp_three,
-                        arp_steps,
-                        noise,
-                        ..
-                    } = &node.params
-                    {
-                        state.chiptune.arp.frequency = arp_speed;
-                        state.chiptune.arp.arp_active = *arp_enabled;
-                        state.chiptune.arp.step_three_active = *arp_three;
-                        state.chiptune.arp.step_semitones = *arp_steps;
-                        state.chiptune.set_noise_mode(*noise);
-                    }
-                    match &node.table_source {
-                        Some(source) => state.chiptune(source, freq, sample_rate, pos),
-                        None => (0.0, 0.0),
-                    }
-                }
-                NodeParams::Multi { .. } => {
-                    let pos = modulated(&node.params, links, &mod_values, 0);
-                    let semis = modulated(&node.params, links, &mod_values, 1);
-                    let det = modulated(&node.params, links, &mod_values, 2);
-                    let spread = modulated(&node.params, links, &mod_values, 3);
-                    let freq = base_freq * semitone_ratio(semis);
-                    match &node.table_source {
-                        Some(source) => state.multi(source, freq, sample_rate, pos, det, spread),
-                        None => (0.0, 0.0),
-                    }
-                }
-                NodeParams::Vector { .. } => {
-                    let x = modulated(&node.params, links, &mod_values, 0);
-                    let y = modulated(&node.params, links, &mod_values, 1);
-                    let p0 = modulated(&node.params, links, &mod_values, 2);
-                    let p1 = modulated(&node.params, links, &mod_values, 3);
-                    let p2 = modulated(&node.params, links, &mod_values, 4);
-                    let p3 = modulated(&node.params, links, &mod_values, 5);
-                    let semis = modulated(&node.params, links, &mod_values, 6);
-                    let det = modulated(&node.params, links, &mod_values, 7);
-                    let freq = base_freq * semitone_ratio(semis) * cent_ratio(det);
-                    let s = &node.vector_sources;
-                    match (&s[0], &s[1], &s[2], &s[3]) {
-                        (Some(s0), Some(s1), Some(s2), Some(s3)) => {
-                            state.vector(s0, s1, s2, s3, p0, p1, p2, p3, freq, sample_rate, x, y)
-                        }
-                        _ => (0.0, 0.0),
                     }
                 }
                 NodeParams::Fm { .. } => {
