@@ -6,7 +6,7 @@ use fastrand::Rng;
 
 const TAU: f32 = std::f32::consts::TAU;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum LfoShape {
     Sine,
     Saw,

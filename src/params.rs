@@ -1,9 +1,17 @@
+use crate::engine::graph::Patch;
+use crate::presets;
 use nice_plug::prelude::*;
+use std::sync::{Arc, Mutex};
 
 #[derive(Params)]
 pub struct LittleMommyParams {
     #[id = "master_gain"]
     pub master_gain: FloatParam,
+    /// The full modular patch (nodes, cables, mod routings, play mode).
+    /// Persisted with the plugin state so DAW session reload restores it.
+    /// The audio engine and the editor share this same `Arc`.
+    #[persist = "patch"]
+    pub patch: Arc<Mutex<Patch>>,
 }
 
 impl Default for LittleMommyParams {
@@ -15,6 +23,7 @@ impl Default for LittleMommyParams {
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
             .with_smoother(SmoothingStyle::Linear(5.0)),
+            patch: Arc::new(Mutex::new(presets::default_patch())),
         }
     }
 }

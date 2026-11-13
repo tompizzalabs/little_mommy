@@ -1,5 +1,6 @@
 use crate::engine::lfo::LfoShape;
 use crate::engine::osc::{AnalogShape, NoiseColor, TableSel, wavetable};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeKind {
@@ -277,7 +278,7 @@ const LFO_DEFS: &[ParamDef] = &[
 ];
 const EMPTY_DEFS: &[ParamDef] = &[];
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum NodeParams {
     Analog {
         shape: AnalogShape,

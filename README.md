@@ -13,7 +13,7 @@ I'll break your ribs and ass bone ( not a threat )
 
 There are no reading and writing presets, at the moment presets we have are just hardcoded
 First we want to focus on stabilizing the generation engine, there are still a lot of upgrades and expansions to be made
-So making preset stuff for now is not feasible
+So making preset stuff for now is not feasible, they will break too often
 
 
 ## Vision

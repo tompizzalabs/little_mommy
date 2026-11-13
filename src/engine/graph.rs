@@ -1,26 +1,27 @@
 use crate::engine::node::{Node, NodeParams};
 use crate::engine::osc::{CustomLibrary, TableSource, wavetable};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Logical row width used to resolve `InputSel::Prev` (previous node in the
 /// same visual row). The grid itself has no fixed size: cells grow on demand.
 pub const GRID_COLS: usize = 4;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Edge {
     pub from: u32,
     pub to: u32,
     pub port: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ModLink {
     pub param: u8,
     pub source: u32,
     pub depth: f32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ModEdge {
     pub from: u32,
     pub to: u32,
@@ -100,14 +101,14 @@ impl Default for Graph {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum InputSel {
     None,
     Prev,
     Slot(u32),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cell {
     pub params: Option<NodeParams>,
     pub in0: InputSel,
@@ -126,7 +127,7 @@ impl Default for Cell {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Grid {
     pub cells: Vec<Cell>,
 }
@@ -378,7 +379,7 @@ fn depth_of(graph: &Graph, id: u32, stack: &mut Vec<u32>, memo: &mut HashMap<u32
     depth
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum PlayMode {
     #[default]
     Poly,
@@ -401,10 +402,12 @@ impl std::fmt::Display for PlayMode {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Patch {
     pub grid: Grid,
+    #[serde(default)]
     pub play_mode: PlayMode,
+    #[serde(default)]
     pub version: u64,
 }
 

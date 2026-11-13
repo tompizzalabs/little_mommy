@@ -31,7 +31,7 @@ pub struct LittleMommy {
 impl Default for LittleMommy {
     fn default() -> Self {
         let params = Arc::new(LittleMommyParams::default());
-        let patch = Arc::new(Mutex::new(presets::default_patch()));
+        let patch = params.patch.clone();
         let library = crate::engine::osc::wavetable::read_guard();
         let compiled = CompiledGraph::compile(&patch.lock().unwrap().grid.to_graph(), &library);
         let compiled_version = patch.lock().unwrap().version;

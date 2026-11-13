@@ -8,7 +8,7 @@ pub const SQUARE_VOLUME_SCALAR: f32 = 0.3;
 pub const DRIFT_RANGE_SEMITONES: f32 = 0.2;
 pub const PWM_SMOOTH_FACTOR: f32 = 0.999;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum AnalogShape {
     Saw,
     Square,

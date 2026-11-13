@@ -176,7 +176,13 @@ impl NiceEguiApp for LittleMommyEditor {
             return;
         };
         let params = &self.params;
+        let grew = self.positions.len() < patch.grid.cells.len();
         ensure_scratch(&patch, &mut self.positions, &mut self.geom);
+        if grew {
+            // The patch was replaced (state restore / preset load from the
+            // host): position the (new) nodes instead of leaving them at ZERO.
+            state::auto_layout(&patch, &mut self.positions);
+        }
 
         ResizableWindow::new("Shade-window")
             .min_size(MIN_SIZE)

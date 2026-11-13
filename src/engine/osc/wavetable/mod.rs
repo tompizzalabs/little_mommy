@@ -74,7 +74,7 @@ impl WtVoice {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum StockTable {
     Morph,
     Harmonics,
@@ -140,7 +140,7 @@ fn fold(x: f32) -> f32 {
 }
 
 /// Patch-stored table selection: a stock table, or a custom table by name.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum TableSel {
     Stock(StockTable),
     Custom(String),
