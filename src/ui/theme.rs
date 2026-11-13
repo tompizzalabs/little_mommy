@@ -64,8 +64,8 @@ pub fn accent_for(params: Option<&NodeParams>) -> Color32 {
         Some(NodeParams::Noise { .. }) => GATE,
         Some(NodeParams::Vector { .. } | NodeParams::Multi { .. }) => PHASE,
         Some(NodeParams::Fm { .. } | NodeParams::Pm { .. }) => CV,
-        Some(_) => AUDIO,
         None => TEXT_FAINT,
+        _ => super::widgets::kind_color(params),
     }
 }
 

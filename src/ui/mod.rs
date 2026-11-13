@@ -189,14 +189,6 @@ impl NiceEguiApp for LittleMommyEditor {
                         params,
                         &setter,
                     );
-                    canvas::palette_strip(
-                        ui,
-                        &mut patch,
-                        &mut self.positions,
-                        &mut self.geom,
-                        &mut self.selected,
-                        &self.scene_rect,
-                    );
                     canvas::canvas(
                         ui,
                         &mut patch,

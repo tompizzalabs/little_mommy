@@ -17,7 +17,6 @@ const GRID_MAX_AXIS: i32 = 160;
 const CULL_PAD: egui::Vec2 = vec2(40.0, 140.0);
 const HIT_MOD_SQ: f32 = 64.0;
 const HIT_PORT_SQ: f32 = 121.0;
-const PALETTE_H: f32 = 76.0;
 
 const VECTOR_IDS: [&str; 4] = ["vec_t0", "vec_t1", "vec_t2", "vec_t3"];
 const EDGE_PREFIX: [&str; 4] = ["E0  ", "E1  ", "E2  ", "E3  "];
@@ -69,98 +68,6 @@ fn add_node(
     }
 }
 
-pub fn palette_strip(
-    ui: &mut egui::Ui,
-    patch: &mut Patch,
-    positions: &mut [Pos2],
-    geom: &mut [NodeGeom; GRID_CELLS],
-    selected: &mut Option<usize>,
-    scene_rect: &egui::Rect,
-) {
-    let entries = palette_entries();
-    let full = ui.available_rect_before_wrap();
-    let band = Rect::from_min_size(full.min, vec2(full.width(), PALETTE_H));
-    ui.allocate_rect(band, Sense::hover());
-    let p = ui.painter();
-    p.rect_filled(band, 0.0, th::SURFACE);
-    p.line_segment(
-        [
-            pos2(band.left(), band.bottom()),
-            pos2(band.right(), band.bottom()),
-        ],
-        Stroke::new(1.0, th::INSET_EDGE),
-    );
-
-    let inner = band.shrink2(vec2(8.0, 6.0));
-    let mut child = ui.new_child(
-        egui::UiBuilder::new()
-            .max_rect(inner)
-            .layout(egui::Layout::left_to_right(egui::Align::TOP)),
-    );
-    child.spacing_mut().item_spacing = vec2(6.0, 0.0);
-    egui::ScrollArea::horizontal()
-        .id_salt("device_palette")
-        .auto_shrink([false, true])
-        .show(&mut child, |ui| {
-            ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
-            let count = patch
-                .grid
-                .cells
-                .iter()
-                .filter(|c| c.params.is_some())
-                .count();
-            for (i, e) in entries.iter().enumerate() {
-                let (rect, resp) = ui.allocate_exact_size(vec2(64.0, 62.0), Sense::click());
-                let hot = resp.hovered();
-                let p = ui.painter();
-                p.rect_filled(rect, 6.0, if hot { th::WIDGET_HOT } else { th::WIDGET });
-                p.rect_stroke(
-                    rect,
-                    6.0,
-                    Stroke::new(1.0, if hot { e.accent } else { th::INSET_EDGE }),
-                    egui::StrokeKind::Inside,
-                );
-                let icon = Rect::from_min_size(rect.min + vec2(10.0, 7.0), vec2(44.0, 26.0));
-                p.rect_filled(icon, 3.0, th::INSET_BG);
-                th::draw_glyph(
-                    &p,
-                    icon,
-                    e.glyph,
-                    if hot {
-                        e.accent
-                    } else {
-                        th::alpha(e.accent, 190)
-                    },
-                    1.5,
-                );
-                p.text(
-                    pos2(rect.center().x, rect.bottom() - 13.0),
-                    egui::Align2::CENTER_CENTER,
-                    &e.label,
-                    egui::FontId::proportional(9.5),
-                    if hot { th::TEXT_BRIGHT } else { th::TEXT_DIM },
-                );
-                if hot {
-                    p.rect_filled(
-                        Rect::from_min_size(
-                            pos2(rect.left() + 8.0, rect.bottom() - 3.0),
-                            vec2(48.0, 2.0),
-                        ),
-                        1.0,
-                        e.accent,
-                    );
-                }
-                if resp.clicked() {
-                    let jitter = vec2((count % 4) as f32 * 26.0, (count % 3) as f32 * 22.0);
-                    let at = scene_rect.center() - vec2(NODE_W * 0.5, 90.0) + jitter;
-                    add_node(patch, positions, geom, selected, e.kind, at);
-                }
-                resp.on_hover_text(format!("Add {}", e.label));
-                let _ = i;
-            }
-        });
-}
-
 #[allow(clippy::too_many_arguments)]
 pub fn canvas(
     ui: &mut egui::Ui,
@@ -209,7 +116,24 @@ pub fn canvas(
             let hover_inside = world_hover.is_some_and(|p| clip.contains(p));
 
             draw_grid(ui, zoom, clip);
-
+            if patch.grid.cells.iter().all(|c| c.params.is_none()) {
+                let c = clip.center();
+                let p = ui.painter();
+                p.text(
+                    c - vec2(0.0, 11.0 / zoom),
+                    egui::Align2::CENTER_CENTER,
+                    "RIGHT-CLICK TO ADD A MODULE",
+                    egui::FontId::proportional(13.0 / zoom),
+                    th::TEXT_FAINT,
+                );
+                p.text(
+                    c + vec2(0.0, 11.0 / zoom),
+                    egui::Align2::CENTER_CENTER,
+                    "middle-drag to pan · wheel to zoom",
+                    egui::FontId::proportional(10.0 / zoom),
+                    th::alpha(th::TEXT_FAINT, 150),
+                );
+            }
             if delete_key && let Some(slot) = *selected {
                 let cell = &mut patch.grid.cells[slot];
                 cell.params = None;
@@ -697,7 +621,12 @@ pub fn canvas(
         }
     }
 }
-
+fn center_detented(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    ["pan", "balance", "skew", "bias", "detune"]
+        .iter()
+        .any(|k| n.contains(k))
+}
 #[allow(clippy::too_many_arguments)]
 fn param_grid(
     ui: &mut egui::Ui,
@@ -720,11 +649,8 @@ fn param_grid(
                 let out = Knob::new(&mut v, def.min, def.max)
                     .accent(accent)
                     .label(def.name)
-                    .default(if def.min >= 0.0 && def.max <= 1.0 {
-                        mid
-                    } else {
-                        mid
-                    })
+                    .default(mid)
+                    .bipolar(center_detented(def.name))
                     .depth(depth)
                     .ui(ui);
                 let g = &mut geom[slot];

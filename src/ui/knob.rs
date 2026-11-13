@@ -13,11 +13,11 @@ pub struct Knob<'a> {
     accent: Color32,
     size: f32,
     label: &'a str,
-    text: Option<String>,
     default: Option<f32>,
     bipolar: bool,
     depth: Option<&'a mut f32>,
     integer: bool,
+    formatter: Option<fn(f32) -> String>,
 }
 
 impl<'a> Knob<'a> {
@@ -29,11 +29,11 @@ impl<'a> Knob<'a> {
             accent: th::AUDIO,
             size: 34.0,
             label: "",
-            text: None,
             default: None,
             bipolar: min < 0.0 && max > 0.0,
             depth: None,
             integer: false,
+            formatter: None,
         }
     }
 
@@ -47,10 +47,6 @@ impl<'a> Knob<'a> {
     }
     pub fn label(mut self, l: &'a str) -> Self {
         self.label = l;
-        self
-    }
-    pub fn text(mut self, t: String) -> Self {
-        self.text = Some(t);
         self
     }
     pub fn default(mut self, d: f32) -> Self {
@@ -150,9 +146,10 @@ impl<'a> Knob<'a> {
             Stroke::new(2.0, th::POINTER),
         );
 
-        let text = self
-            .text
-            .unwrap_or_else(|| fmt_param(self.label, value, self.min, self.max, self.integer));
+        let text = match self.formatter {
+            Some(f) => f(value),
+            None => fmt_param(self.label, value, self.min, self.max, self.integer),
+        };
         painter.text(
             pos2(center.x, rect.top() + self.size + 7.0),
             egui::Align2::CENTER_CENTER,
