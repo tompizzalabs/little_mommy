@@ -1,6 +1,7 @@
 # Little Mommy III
 
 **Modular Node-Based synthesizer**
+<img width="960" height="600" alt="image" src="https://github.com/user-attachments/assets/e50a21c8-c932-440e-a721-9ff63778edc6" />
 
 # WARNING
 If you make **Big Daddy V** in response to this synth,
