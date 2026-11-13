@@ -7,7 +7,7 @@ pub mod osc;
 
 pub use arpeggiator::{ChiptuneArpeggiator, pitch_shift_multiplier};
 pub use dsp::{EnvStage, NodeState};
-pub use graph::{CompiledGraph, CompiledNode, Edge, Graph, MAX_NODES, Patch};
+pub use graph::{CompiledGraph, CompiledNode, Edge, Graph, Patch};
 pub use lfo::{LfoShape, LfoState};
 pub use node::{Node, NodeKind, NodeParams};
 pub use osc::{AnalogShape, AnalogVoiceState, NoiseColor, wavetable};

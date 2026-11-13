@@ -1,5 +1,5 @@
 use super::knob::Knob;
-use super::state::{GRID_CELLS, auto_layout, content_bbox};
+use super::state::{auto_layout, content_bbox};
 use super::theme as th;
 use crate::engine::graph::{Grid, Patch, PlayMode};
 use crate::engine::osc::wavetable;
@@ -13,7 +13,7 @@ use std::sync::Arc;
 pub fn top_bar(
     ui: &mut egui::Ui,
     patch: &mut Patch,
-    positions: &mut [egui::Pos2],
+    positions: &mut Vec<egui::Pos2>,
     scene_rect: &mut egui::Rect,
     preset_index: &mut usize,
     selected: &mut Option<usize>,
@@ -21,7 +21,7 @@ pub fn top_bar(
     setter: &ParamSetter,
 ) {
     let full = ui.available_rect_before_wrap();
-    let band = egui::Rect::from_min_size(full.min, egui::vec2(full.width(), 52.0));
+    let band = egui::Rect::from_min_size(full.min, egui::vec2(full.width(), 64.0));
     ui.allocate_rect(band, egui::Sense::hover());
     ui.painter().rect_filled(band, 0.0, th::SURFACE);
     ui.painter().line_segment(
@@ -34,16 +34,11 @@ pub fn top_bar(
 
     let mut child = ui.new_child(
         egui::UiBuilder::new()
-            .max_rect(band.shrink2(egui::vec2(12.0, 8.0)))
+            .max_rect(band.shrink2(egui::vec2(12.0, 7.0)))
             .layout(egui::Layout::left_to_right(egui::Align::Center)),
     );
     child.spacing_mut().item_spacing = egui::vec2(10.0, 0.0);
 
-    child.painter().circle_filled(
-        egui::pos2(band.left() + 20.0, band.center().y),
-        4.0,
-        th::AUDIO,
-    );
     child.add_space(14.0);
     child.label(
         egui::RichText::new("LITTLE MOMMY III")
@@ -79,6 +74,9 @@ pub fn top_bar(
         patch.play_mode = preset.play_mode;
         patch.version = patch.version.wrapping_add(1);
         *selected = None;
+        if positions.len() < patch.grid.cells.len() {
+            positions.resize(patch.grid.cells.len(), egui::Pos2::ZERO);
+        }
         auto_layout(patch, positions);
         *scene_rect = content_bbox(patch, positions);
     }
@@ -140,9 +138,13 @@ pub fn top_bar(
         }
         ui.add_space(10.0);
         ui.label(
-            egui::RichText::new(format!("{}/{} SLOTS", active, GRID_CELLS))
-                .size(10.0)
-                .color(th::TEXT_FAINT),
+            egui::RichText::new(format!(
+                "{} NODE{}",
+                active,
+                if active == 1 { "" } else { "S" }
+            ))
+            .size(10.0)
+            .color(th::TEXT_FAINT),
         );
         ui.add_space(8.0);
         ui.painter().vline(

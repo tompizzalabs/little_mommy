@@ -248,7 +248,16 @@ pub fn badge(painter: &egui::Painter, rect: Rect, fill: Color32, text: &str, tex
         text_color,
     );
 }
-
+pub fn badge_arrow(painter: &egui::Painter, rect: Rect, fill: Color32, color: Color32) {
+    painter.rect_filled(rect, 4.0, fill);
+    let c = rect.center();
+    let s = rect.width().min(rect.height()) * 0.30;
+    let tip = pos2(c.x + s, c.y);
+    let stroke = Stroke::new(1.4, color);
+    painter.line_segment([pos2(c.x - s, c.y), tip], stroke);
+    painter.line_segment([tip, pos2(tip.x - s * 0.62, tip.y - s * 0.62)], stroke);
+    painter.line_segment([tip, pos2(tip.x - s * 0.62, tip.y + s * 0.62)], stroke);
+}
 pub fn port(painter: &egui::Painter, pos: Pos2, color: Color32, hot: bool, output: bool) {
     let r = if output { 5.0 } else { 4.5 };
     if hot {

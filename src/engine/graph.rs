@@ -2,10 +2,9 @@ use crate::engine::node::{Node, NodeParams};
 use crate::engine::osc::{CustomLibrary, TableSource, wavetable};
 use std::collections::HashMap;
 
-pub const MAX_NODES: usize = 32;
+/// Logical row width used to resolve `InputSel::Prev` (previous node in the
+/// same visual row). The grid itself has no fixed size: cells grow on demand.
 pub const GRID_COLS: usize = 4;
-pub const GRID_ROWS: usize = 4;
-pub const GRID_CELLS: usize = GRID_COLS * GRID_ROWS;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Edge {
@@ -17,7 +16,7 @@ pub struct Edge {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ModLink {
     pub param: u8,
-    pub source: u8,
+    pub source: u32,
     pub depth: f32,
 }
 
@@ -105,7 +104,7 @@ impl Default for Graph {
 pub enum InputSel {
     None,
     Prev,
-    Slot(u8),
+    Slot(u32),
 }
 
 #[derive(Debug, Clone)]
@@ -134,17 +133,40 @@ pub struct Grid {
 
 impl Grid {
     pub fn new() -> Self {
-        Self {
-            cells: (0..GRID_CELLS).map(|_| Cell::default()).collect(),
+        Self { cells: Vec::new() }
+    }
+
+    /// Grow the grid so that `slot` exists. New cells are empty by default.
+    fn ensure(&mut self, slot: usize) {
+        if self.cells.len() <= slot {
+            self.cells.resize(slot + 1, Cell::default());
         }
     }
 
+    /// Place a node in the first empty slot, appending a new cell if the grid
+    /// is full. Returns the slot index. This is how the grid grows: there is
+    /// no upper bound on the number of nodes.
+    pub fn insert(&mut self, params: NodeParams, in0: InputSel, in1: InputSel) -> usize {
+        let slot = self
+            .cells
+            .iter()
+            .position(|c| c.params.is_none())
+            .unwrap_or(self.cells.len());
+        self.ensure(slot);
+        let cell = &mut self.cells[slot];
+        cell.params = Some(params);
+        cell.in0 = in0;
+        cell.in1 = in1;
+        cell.mods.clear();
+        slot
+    }
+
     pub fn set(&mut self, slot: usize, params: Option<NodeParams>, in0: InputSel, in1: InputSel) {
-        if let Some(cell) = self.cells.get_mut(slot) {
-            cell.params = params;
-            cell.in0 = in0;
-            cell.in1 = in1;
-        }
+        self.ensure(slot);
+        let cell = &mut self.cells[slot];
+        cell.params = params;
+        cell.in0 = in0;
+        cell.in1 = in1;
     }
 
     pub fn resolve(&self, slot: usize, sel: InputSel) -> Option<u32> {
@@ -222,7 +244,7 @@ impl Default for Grid {
 #[derive(Debug, Clone)]
 pub struct CompiledNode {
     pub params: NodeParams,
-    pub inputs: [Option<u8>; 2],
+    pub inputs: [Option<u32>; 2],
     pub table_source: Option<TableSource>,
     pub vector_sources: [Option<TableSource>; 4],
     pub pair_sources: [Option<TableSource>; 2],
@@ -254,7 +276,6 @@ impl CompiledGraph {
             .collect();
 
         depths.sort_by_key(|&(id, depth)| (depth, id));
-        depths.truncate(MAX_NODES);
 
         let mut slot_of: HashMap<u32, usize> = HashMap::new();
         for (slot, (id, _)) in depths.iter().enumerate() {
@@ -268,13 +289,13 @@ impl CompiledGraph {
                 None => continue,
             };
 
-            let mut inputs: [Option<u8>; 2] = [None, None];
+            let mut inputs: [Option<u32>; 2] = [None, None];
             for edge in graph.edges.iter().filter(|e| e.to == *id) {
                 let port = edge.port as usize;
                 if port < 2
                     && let Some(&slot) = slot_of.get(&edge.from)
                 {
-                    inputs[port] = Some(slot as u8);
+                    inputs[port] = Some(slot as u32);
                 }
             }
 
@@ -283,7 +304,7 @@ impl CompiledGraph {
                 if let Some(&src_slot) = slot_of.get(&edge.from) {
                     mod_links.push(ModLink {
                         param: edge.param,
-                        source: src_slot as u8,
+                        source: src_slot as u32,
                         depth: edge.depth,
                     });
                 }

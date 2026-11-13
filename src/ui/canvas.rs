@@ -1,6 +1,7 @@
 use super::knob::{self, Knob};
 use super::preview;
-use super::state::{DragState, GRID_CELLS, MAX_MOD_PARAMS, NodeGeom};
+use super::shape;
+use super::state::{DragState, MAX_MOD_PARAMS, NodeGeom, ensure_scratch};
 use super::theme::{self as th, BODY_W, Glyph, HEADER_H, NODE_W, PAD};
 use super::widgets::{KIND_LIST, kind_label, stock_label, table_label};
 use crate::engine::graph::{InputSel, ModLink, Patch};
@@ -9,7 +10,6 @@ use crate::engine::node::{NodeKind, NodeParams, ParamDef};
 use crate::engine::osc::{AnalogShape, NoiseColor, StockTable, TableSel, wavetable};
 use egui::{Color32, Pos2, Rect, Sense, Shape, Stroke, pos2, vec2};
 use std::sync::OnceLock;
-
 const ZOOM_MIN: f32 = 0.25;
 const ZOOM_MAX: f32 = 2.5;
 const GRID_MIN_PX: f32 = 26.0;
@@ -49,42 +49,52 @@ fn palette_entries() -> &'static [PaletteEntry] {
 
 fn add_node(
     patch: &mut Patch,
-    positions: &mut [Pos2],
-    geom: &mut [NodeGeom; GRID_CELLS],
+    positions: &mut Vec<Pos2>,
+    geom: &mut Vec<NodeGeom>,
     selected: &mut Option<usize>,
     kind: NodeKind,
     at: Pos2,
 ) {
-    if let Some(slot) = patch.grid.cells.iter().position(|c| c.params.is_none()) {
-        let cell = &mut patch.grid.cells[slot];
-        cell.params = Some(NodeParams::default_for(kind));
-        cell.in0 = InputSel::None;
-        cell.in1 = InputSel::None;
-        cell.mods.clear();
-        positions[slot] = at;
-        geom[slot] = NodeGeom::default();
-        *selected = Some(slot);
-        patch.version = patch.version.wrapping_add(1);
+    // First empty slot is reused; otherwise the grid grows by one cell.
+    let slot = patch
+        .grid
+        .insert(NodeParams::default_for(kind), InputSel::None, InputSel::None);
+    if positions.len() <= slot {
+        positions.resize(slot + 1, Pos2::ZERO);
     }
+    if geom.len() <= slot {
+        geom.resize(slot + 1, NodeGeom::default());
+    }
+    positions[slot] = at;
+    geom[slot] = NodeGeom::default();
+    *selected = Some(slot);
+    patch.version = patch.version.wrapping_add(1);
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn canvas(
     ui: &mut egui::Ui,
     patch: &mut Patch,
-    positions: &mut [Pos2],
+    positions: &mut Vec<Pos2>,
     selected: &mut Option<usize>,
     drag: &mut DragState,
     scene_rect: &mut egui::Rect,
-    geom: &mut [NodeGeom; GRID_CELLS],
+    geom: &mut Vec<NodeGeom>,
     context_menu_pos: &mut Option<Pos2>,
     context_menu_world: &mut Option<Pos2>,
 ) {
+    // The grid is unbounded: keep the editor scratch buffers in sync with the
+    // cell count before touching them below.
+    ensure_scratch(patch, positions, geom);
+    let n_cells = patch.grid.cells.len();
+
     let lib = wavetable::read_guard();
-    let mut kinds = [None::<NodeKind>; GRID_CELLS];
-    for slot in 0..GRID_CELLS {
-        kinds[slot] = patch.grid.cells[slot].params.as_ref().map(|p| p.kind());
-    }
+    let kinds: Vec<Option<NodeKind>> = patch
+        .grid
+        .cells
+        .iter()
+        .map(|c| c.params.as_ref().map(|p| p.kind()))
+        .collect();
 
     ui.painter()
         .rect_filled(ui.available_rect_before_wrap(), 0.0, th::CANVAS_BG);
@@ -141,10 +151,10 @@ pub fn canvas(
                 cell.in1 = InputSel::None;
                 cell.mods.clear();
                 for cell in patch.grid.cells.iter_mut() {
-                    if cell.in0 == InputSel::Slot(slot as u8) {
+                    if cell.in0 == InputSel::Slot(slot as u32) {
                         cell.in0 = InputSel::None;
                     }
-                    if cell.in1 == InputSel::Slot(slot as u8) {
+                    if cell.in1 == InputSel::Slot(slot as u32) {
                         cell.in1 = InputSel::None;
                     }
                     cell.mods.retain(|l| l.source as usize != slot);
@@ -162,7 +172,7 @@ pub fn canvas(
                 *context_menu_world = Some(to_scene * p);
             }
 
-            for slot in 0..GRID_CELLS {
+            for slot in 0..n_cells {
                 let cell = &mut patch.grid.cells[slot];
                 if cell.params.is_none() {
                     geom[slot].valid = false;
@@ -249,6 +259,7 @@ pub fn canvas(
                             );
 
                             let hp = ui.painter();
+
                             let badge_l =
                                 Rect::from_min_size(card.min + vec2(8.0, 7.0), vec2(15.0, 14.0));
                             th::badge(
@@ -258,6 +269,7 @@ pub fn canvas(
                                 &title.chars().next().unwrap_or('N').to_string(),
                                 accent,
                             );
+
                             hp.text(
                                 pos2(card.center().x, card.top() + HEADER_H * 0.5),
                                 egui::Align2::CENTER_CENTER,
@@ -265,11 +277,13 @@ pub fn canvas(
                                 egui::FontId::proportional(12.0),
                                 accent,
                             );
+
                             let badge_r = Rect::from_min_size(
                                 pos2(card.right() - 23.0, card.top() + 7.0),
                                 vec2(15.0, 14.0),
                             );
-                            th::badge(&hp, badge_r, th::alpha(th::CV, 52), "→", th::CV);
+                            th::badge_arrow(&hp, badge_r, th::alpha(th::CV, 52), th::CV);
+
                             ui.advance_cursor_after_rect(card);
                             card
                         },
@@ -290,7 +304,7 @@ pub fn canvas(
             let mut hovered_node: Option<usize> = None;
 
             if let Some(h) = world_hover {
-                'mods: for slot in 0..GRID_CELLS {
+                'mods: for slot in 0..n_cells {
                     let g = geom[slot];
                     if !g.valid {
                         continue;
@@ -308,7 +322,7 @@ pub fn canvas(
                 }
 
                 if hovered_mod_in.is_none() && hovered_mod_out.is_none() {
-                    'ports: for slot in 0..GRID_CELLS {
+                    'ports: for slot in 0..n_cells {
                         let g = geom[slot];
                         if !g.valid || patch.grid.cells[slot].params.is_none() {
                             continue;
@@ -330,7 +344,7 @@ pub fn canvas(
                         }
                     }
                     if hovered_port.is_none() {
-                        for slot in (0..GRID_CELLS).rev() {
+                        for slot in (0..n_cells).rev() {
                             if geom[slot].valid && geom[slot].rect.contains(h) {
                                 hovered_node = Some(slot);
                                 break;
@@ -383,9 +397,9 @@ pub fn canvas(
                         {
                             let cell = &mut patch.grid.cells[slot];
                             if port == 0 {
-                                cell.in0 = InputSel::Slot(from as u8);
+                                cell.in0 = InputSel::Slot(from as u32);
                             } else {
-                                cell.in1 = InputSel::Slot(from as u8);
+                                cell.in1 = InputSel::Slot(from as u32);
                             }
                             patch.version = patch.version.wrapping_add(1);
                         }
@@ -397,7 +411,7 @@ pub fn canvas(
                             let mods = &mut patch.grid.cells[slot].mods;
                             mods.retain(|l| l.param as usize != param);
                             mods.push(ModLink {
-                                source: from as u8,
+                                source: from as u32,
                                 param: param as u8,
                                 depth: 1.0,
                             });
@@ -485,7 +499,7 @@ pub fn canvas(
                 _ => {}
             }
 
-            for slot in 0..GRID_CELLS {
+            for slot in 0..n_cells {
                 let g = geom[slot];
                 if !g.valid || patch.grid.cells[slot].params.is_none() {
                     continue;
@@ -634,7 +648,7 @@ fn param_grid(
     defs: &'static [ParamDef],
     accent: Color32,
     slot: usize,
-    geom: &mut [NodeGeom; GRID_CELLS],
+    geom: &mut [NodeGeom],
     dirty: &mut bool,
 ) {
     for chunk in defs.chunks(4) {
@@ -745,17 +759,7 @@ fn kind_controls(
             *dirty |= knob::segmented(ui, "wave_voices", unison_voices, &VOICE_OPTIONS, accent);
         }
         NodeParams::Lfo { shape, .. } => {
-            let mut idx = LfoShape::ALL.iter().position(|s| s == shape).unwrap_or(0);
-            let options: Vec<(usize, String)> = LfoShape::ALL
-                .iter()
-                .enumerate()
-                .map(|(i, s)| (i, s.to_string()))
-                .collect();
-            let refs: Vec<(usize, &str)> = options.iter().map(|(i, s)| (*i, s.as_str())).collect();
-            if knob::segmented(ui, "lfo_shape", &mut idx, &refs, accent) {
-                *shape = LfoShape::ALL[idx];
-                *dirty = true;
-            }
+            *dirty |= shape::wave_shape_picker(ui, "lfo_shape", shape, &LfoShape::ALL, accent);
             preview::preview_lfo(ui, BODY_W, accent, *shape);
         }
         NodeParams::Chiptune {

@@ -1,5 +1,5 @@
 use crate::engine::dsp::{NodeState, cent_ratio, semitone_ratio};
-use crate::engine::graph::{CompiledGraph, MAX_NODES, ModLink};
+use crate::engine::graph::{CompiledGraph, ModLink};
 use crate::engine::node::NodeParams;
 use crate::engine::osc::analog::DriftGenerator;
 use nice_plug::util;
@@ -16,9 +16,14 @@ pub struct Voice {
     pub stealing: bool,
     pub steal_gain: f32,
     pub states: Box<[NodeState]>,
+    // Scratch buses sized to the compiled graph. Grown on demand, never
+    // reallocated while the graph shape is unchanged.
+    outputs_l: Vec<f32>,
+    outputs_r: Vec<f32>,
+    mod_values: Vec<f32>,
 }
 
-fn mod_offset(links: &[ModLink], param: usize, mods: &[f32; MAX_NODES]) -> f32 {
+fn mod_offset(links: &[ModLink], param: usize, mods: &[f32]) -> f32 {
     let mut sum = 0.0;
     for l in links {
         if l.param as usize == param {
@@ -28,7 +33,7 @@ fn mod_offset(links: &[ModLink], param: usize, mods: &[f32; MAX_NODES]) -> f32 {
     sum
 }
 
-fn modulated(params: &NodeParams, links: &[ModLink], mods: &[f32; MAX_NODES], i: usize) -> f32 {
+fn modulated(params: &NodeParams, links: &[ModLink], mods: &[f32], i: usize) -> f32 {
     let d = &params.param_defs()[i];
     let base = params.param_get(i);
     let off = mod_offset(links, i, mods);
@@ -36,9 +41,9 @@ fn modulated(params: &NodeParams, links: &[ModLink], mods: &[f32; MAX_NODES], i:
 }
 
 impl Voice {
-    pub fn new(internal_voice_id: u64, note_number: u8, velocity: f32) -> Self {
+    pub fn new(internal_voice_id: u64, note_number: u8, velocity: f32, num_nodes: usize) -> Self {
         let seed_base = internal_voice_id as u32;
-        let mut states: Box<[NodeState]> = vec![NodeState::default(); MAX_NODES].into_boxed_slice();
+        let mut states: Box<[NodeState]> = vec![NodeState::default(); num_nodes].into_boxed_slice();
 
         for (index, state) in states.iter_mut().enumerate() {
             state.noise.seed(
@@ -111,6 +116,9 @@ impl Voice {
             stealing: false,
             steal_gain: 1.0,
             states,
+            outputs_l: vec![0.0; num_nodes],
+            outputs_r: vec![0.0; num_nodes],
+            mod_values: vec![0.0; num_nodes],
         }
     }
 
@@ -140,9 +148,17 @@ impl Voice {
         }
 
         let base_freq = util::midi_key_to_freq(self.note_number);
-        let mut outputs_l = [0.0f32; MAX_NODES];
-        let mut outputs_r = [0.0f32; MAX_NODES];
-        let mut mod_values = [0.0f32; MAX_NODES];
+        let node_count = compiled.nodes.len();
+        if self.outputs_l.len() < node_count {
+            // The graph grew (voices are rebuilt on recompile, so this only
+            // guards a race between graph swap and voice allocation).
+            self.outputs_l.resize(node_count, 0.0);
+            self.outputs_r.resize(node_count, 0.0);
+            self.mod_values.resize(node_count, 0.0);
+        }
+        let outputs_l = &mut self.outputs_l[..node_count];
+        let outputs_r = &mut self.outputs_r[..node_count];
+        let mod_values = &mut self.mod_values[..node_count];
         let mut env_present = false;
         let mut env_active = false;
 

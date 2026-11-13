@@ -2,6 +2,7 @@ mod canvas;
 mod header;
 mod knob;
 mod preview;
+mod shape;
 mod state;
 mod theme;
 mod widgets;
@@ -15,7 +16,7 @@ use nice_plug_egui::{
     EguiEditor, EguiEditorState, EguiNiceSettings, NiceEguiApp, RepaintNotifier,
     create_egui_editor, resizable_window::ResizableWindow,
 };
-use state::{DragState, GRID_CELLS, NodeGeom, OpenEditorState};
+use state::{DragState, NodeGeom, OpenEditorState, ensure_scratch};
 use std::sync::{Arc, Mutex};
 
 pub const MIN_WINDOW_SIZE: LogicalSize<f32> = LogicalSize::new(1040.0, 660.0);
@@ -112,7 +113,7 @@ pub struct LittleMommyEditor {
     params: Arc<LittleMommyParams>,
     patch: Arc<Mutex<Patch>>,
     positions: Vec<egui::Pos2>,
-    geom: [NodeGeom; GRID_CELLS],
+    geom: Vec<NodeGeom>,
     selected: Option<usize>,
     drag: DragState,
     preset_index: usize,
@@ -123,9 +124,11 @@ pub struct LittleMommyEditor {
 
 impl LittleMommyEditor {
     pub fn new(params: Arc<LittleMommyParams>, patch: Arc<Mutex<Patch>>) -> Self {
-        let mut positions = vec![egui::Pos2::ZERO; GRID_CELLS];
+        let mut positions = Vec::new();
+        let mut geom = Vec::new();
         let scene_rect = {
             let guard = patch.lock().unwrap();
+            ensure_scratch(&guard, &mut positions, &mut geom);
             state::auto_layout(&guard, &mut positions);
             state::content_bbox(&guard, &positions)
         };
@@ -134,7 +137,7 @@ impl LittleMommyEditor {
             params,
             patch,
             positions,
-            geom: [NodeGeom::default(); GRID_CELLS],
+            geom,
             selected: None,
             drag: DragState::None,
             preset_index: 0,
@@ -173,6 +176,7 @@ impl NiceEguiApp for LittleMommyEditor {
             return;
         };
         let params = &self.params;
+        ensure_scratch(&patch, &mut self.positions, &mut self.geom);
 
         ResizableWindow::new("Shade-window")
             .min_size(MIN_SIZE)

@@ -2,7 +2,6 @@ use super::theme::{HEADER_H, NODE_W};
 use crate::engine::graph::Patch;
 use nice_plug::context::gui::GuiContext;
 
-pub const GRID_CELLS: usize = 16;
 pub const MAX_MOD_PARAMS: usize = 24;
 
 const LAYOUT_COL_W: f32 = 300.0;
@@ -69,12 +68,27 @@ impl NodeGeom {
     }
 }
 
+/// Grow the editor scratch buffers (node positions + geometry cache) to cover
+/// every cell in the patch. Call once per frame and after any operation that
+/// can add nodes; keeps a single `Vec` allocation instead of fixed arrays.
+pub fn ensure_scratch(patch: &Patch, positions: &mut Vec<egui::Pos2>, geom: &mut Vec<NodeGeom>) {
+    let n = patch.grid.cells.len();
+    if positions.len() < n {
+        positions.resize(n, egui::Pos2::ZERO);
+    }
+    if geom.len() < n {
+        geom.resize(n, NodeGeom::default());
+    }
+}
+
 pub fn content_bbox(patch: &Patch, positions: &[egui::Pos2]) -> egui::Rect {
     let mut bbox = egui::Rect::NOTHING;
     let mut any = false;
     for (slot, cell) in patch.grid.cells.iter().enumerate() {
-        if cell.params.is_some() {
-            bbox = bbox.union(egui::Rect::from_min_size(positions[slot], EST_SIZE));
+        if cell.params.is_some()
+            && let Some(&p) = positions.get(slot)
+        {
+            bbox = bbox.union(egui::Rect::from_min_size(p, EST_SIZE));
             any = true;
         }
     }
@@ -97,9 +111,12 @@ impl OpenEditorState {
 }
 
 pub fn auto_layout(patch: &Patch, positions: &mut [egui::Pos2]) {
-    let n = patch.grid.cells.len().min(positions.len()).min(GRID_CELLS);
+    let n = patch.grid.cells.len().min(positions.len());
+    if n == 0 {
+        return;
+    }
     let cap = n.saturating_sub(1);
-    let mut depth = [0usize; GRID_CELLS];
+    let mut depth = vec![0usize; n];
 
     for _ in 0..n {
         let mut changed = false;
@@ -132,8 +149,8 @@ pub fn auto_layout(patch: &Patch, positions: &mut [egui::Pos2]) {
         }
     }
 
-    let mut counts = [0usize; GRID_CELLS];
-    let mut rows = [0usize; GRID_CELLS];
+    let mut counts = vec![0usize; n];
+    let mut rows = vec![0usize; n];
     for slot in 0..n {
         if patch.grid.cells[slot].params.is_some() {
             counts[depth[slot]] += 1;

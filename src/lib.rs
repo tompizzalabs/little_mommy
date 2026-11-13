@@ -140,7 +140,7 @@ impl LittleMommy {
     fn allocate_voice(&mut self, note: u8, velocity: f32) {
         let internal_voice_id = self.next_internal_voice_id;
         self.next_internal_voice_id = internal_voice_id.wrapping_add(1);
-        let new_voice = Voice::new(internal_voice_id, note, velocity);
+        let new_voice = Voice::new(internal_voice_id, note, velocity, self.compiled.nodes.len());
         if let Some(free_idx) = self.voices.iter().position(|v| v.is_none()) {
             self.voices[free_idx] = Some(new_voice);
             return;
