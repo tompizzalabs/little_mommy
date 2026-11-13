@@ -1,7 +1,9 @@
 mod canvas;
 mod header;
+mod knob;
 mod preview;
 mod state;
+mod theme;
 mod widgets;
 
 use crate::engine::graph::Patch;
@@ -13,36 +15,96 @@ use nice_plug_egui::{
     EguiEditor, EguiEditorState, EguiNiceSettings, NiceEguiApp, RepaintNotifier,
     create_egui_editor, resizable_window::ResizableWindow,
 };
-use state::{DragState, GRID_CELLS, OpenEditorState};
+use state::{DragState, GRID_CELLS, NodeGeom, OpenEditorState};
 use std::sync::{Arc, Mutex};
 
-pub const MIN_WINDOW_SIZE: LogicalSize<f32> = LogicalSize::new(960.0, 600.0);
+pub const MIN_WINDOW_SIZE: LogicalSize<f32> = LogicalSize::new(1040.0, 660.0);
 pub const INITIAL_SCALE_FACTOR: f32 = 1.0;
 const RESIZE_HINT: ResizeHint = ResizeHint::resizable().with_min_logical_size(MIN_WINDOW_SIZE);
+const MIN_SIZE: egui::Vec2 = egui::vec2(MIN_WINDOW_SIZE.width, MIN_WINDOW_SIZE.height);
+const FONT_NAME: &str = "MPLUS2";
 
-/// Custom UI font shipped with the plugin, embedded at compile time.
 static CUSTOM_FONT: &[u8] = include_bytes!("../../assets/fonts/MPLUS2-VariableFont_wght.ttf");
 
-/// Install the bundled font as the primary proportional/monospace font so all
-/// UI text renders with it.
 fn install_fonts(ctx: &egui::Context) {
-    const NAME: &str = "MPLUS2";
     let mut fonts = egui::FontDefinitions::default();
     fonts.font_data.insert(
-        NAME.to_owned(),
-        std::sync::Arc::new(egui::FontData::from_static(CUSTOM_FONT)),
+        FONT_NAME.to_owned(),
+        Arc::new(egui::FontData::from_static(CUSTOM_FONT)),
     );
     fonts
         .families
         .entry(egui::FontFamily::Proportional)
         .or_default()
-        .insert(0, NAME.to_owned());
+        .insert(0, FONT_NAME.to_owned());
     fonts
         .families
         .entry(egui::FontFamily::Monospace)
         .or_default()
-        .push(NAME.to_owned());
+        .push(FONT_NAME.to_owned());
     ctx.set_fonts(fonts);
+}
+
+fn apply_theme(ctx: &egui::Context) {
+    let mut style = (*ctx.style_of(egui::Theme::Dark)).clone();
+    let v = &mut style.visuals;
+    *v = egui::Theme::Dark.default_visuals();
+    v.override_text_color = Some(theme::TEXT_BRIGHT);
+    v.panel_fill = theme::CANVAS_BG;
+    v.window_fill = theme::SURFACE_HI;
+    v.window_stroke = egui::Stroke::new(1.0, theme::NODE_EDGE);
+    v.window_corner_radius = 8.into();
+    v.menu_corner_radius = 8.into();
+    v.extreme_bg_color = theme::INSET_BG;
+    v.faint_bg_color = theme::SURFACE;
+    v.code_bg_color = theme::INSET_BG;
+    v.hyperlink_color = theme::CV;
+    v.selection.bg_fill = theme::alpha(theme::CV, 70);
+    v.selection.stroke = egui::Stroke::new(1.0, theme::CV);
+    v.warn_fg_color = theme::WARN;
+    v.error_fg_color = theme::AUDIO;
+
+    let w = &mut v.widgets;
+
+    w.noninteractive.bg_fill = theme::SURFACE;
+    w.noninteractive.weak_bg_fill = theme::SURFACE;
+    w.noninteractive.bg_stroke = egui::Stroke::new(1.0, theme::INSET_EDGE);
+    w.noninteractive.fg_stroke = egui::Stroke::new(1.0, theme::TEXT_DIM);
+    w.noninteractive.corner_radius = 4.into();
+
+    w.inactive.bg_fill = theme::WIDGET;
+    w.inactive.weak_bg_fill = theme::WIDGET;
+    w.inactive.bg_stroke = egui::Stroke::new(1.0, theme::INSET_EDGE);
+    w.inactive.fg_stroke = egui::Stroke::new(1.0, theme::TEXT_DIM);
+    w.inactive.corner_radius = 5.into();
+
+    w.hovered.bg_fill = theme::WIDGET_HOT;
+    w.hovered.weak_bg_fill = theme::WIDGET_HOT;
+    w.hovered.bg_stroke = egui::Stroke::new(1.0, theme::CV);
+    w.hovered.fg_stroke = egui::Stroke::new(1.4, theme::TEXT_BRIGHT);
+    w.hovered.corner_radius = 5.into();
+
+    w.active.bg_fill = theme::WIDGET_ON;
+    w.active.weak_bg_fill = theme::WIDGET_ON;
+    w.active.bg_stroke = egui::Stroke::new(1.0, theme::CV);
+    w.active.fg_stroke = egui::Stroke::new(1.4, theme::TEXT_BRIGHT);
+    w.active.corner_radius = 5.into();
+
+    w.open.bg_fill = theme::SURFACE_HI;
+    w.open.weak_bg_fill = theme::SURFACE_HI;
+    w.open.bg_stroke = egui::Stroke::new(1.0, theme::NODE_EDGE);
+    w.open.fg_stroke = egui::Stroke::new(1.0, theme::TEXT_BRIGHT);
+
+    style.spacing.item_spacing = egui::vec2(6.0, 6.0);
+    style.spacing.button_padding = egui::vec2(9.0, 5.0);
+    style.spacing.menu_margin = egui::Margin::same(6);
+    style.spacing.window_margin = egui::Margin::same(8);
+    style.spacing.scroll.bar_width = 7.0;
+    style.spacing.scroll.foreground_color = false;
+    style.spacing.scroll.bar_inner_margin = 2.0;
+    style.spacing.scroll.bar_outer_margin = 2.0;
+    ctx.set_style_of(egui::Theme::Dark, style);
+    ctx.set_theme(egui::Theme::Dark);
 }
 
 pub struct LittleMommyEditor {
@@ -50,6 +112,7 @@ pub struct LittleMommyEditor {
     params: Arc<LittleMommyParams>,
     patch: Arc<Mutex<Patch>>,
     positions: Vec<egui::Pos2>,
+    geom: [NodeGeom; GRID_CELLS],
     selected: Option<usize>,
     drag: DragState,
     preset_index: usize,
@@ -61,18 +124,17 @@ pub struct LittleMommyEditor {
 impl LittleMommyEditor {
     pub fn new(params: Arc<LittleMommyParams>, patch: Arc<Mutex<Patch>>) -> Self {
         let mut positions = vec![egui::Pos2::ZERO; GRID_CELLS];
-        let (positions, scene_rect) = {
+        let scene_rect = {
             let guard = patch.lock().unwrap();
             state::auto_layout(&guard, &mut positions);
-            let scene_rect = state::content_bbox(&guard, &positions);
-            (positions, scene_rect)
+            state::content_bbox(&guard, &positions)
         };
-
         Self {
             open_state: None,
             params,
             patch,
             positions,
+            geom: [NodeGeom::default(); GRID_CELLS],
             selected: None,
             drag: DragState::None,
             preset_index: 0,
@@ -91,6 +153,7 @@ impl NiceEguiApp for LittleMommyEditor {
         _frame: &mut nice_plug_egui::Frame,
     ) -> Result<(), nice_plug_egui::baseview::HandlerError> {
         install_fonts(&egui_ctx);
+        apply_theme(&egui_ctx);
         self.open_state = Some(OpenEditorState::new(nice_gui_ctx));
         Ok(())
     }
@@ -106,15 +169,16 @@ impl NiceEguiApp for LittleMommyEditor {
             return;
         };
         let setter = open_state.nice_gui_ctx.param_setter();
-        let mut patch = self.patch.lock().unwrap();
-
+        let Ok(mut patch) = self.patch.lock() else {
+            return;
+        };
         let params = &self.params;
 
         ResizableWindow::new("Shade-window")
-            .min_size(egui::vec2(MIN_WINDOW_SIZE.width, MIN_WINDOW_SIZE.height))
+            .min_size(MIN_SIZE)
             .show(ui, |ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
                 ui.vertical(|ui| {
-                    // Top Header Bar
                     header::top_bar(
                         ui,
                         &mut patch,
@@ -125,10 +189,14 @@ impl NiceEguiApp for LittleMommyEditor {
                         params,
                         &setter,
                     );
-
-                    ui.separator();
-
-                    // Canvas
+                    canvas::palette_strip(
+                        ui,
+                        &mut patch,
+                        &mut self.positions,
+                        &mut self.geom,
+                        &mut self.selected,
+                        &self.scene_rect,
+                    );
                     canvas::canvas(
                         ui,
                         &mut patch,
@@ -136,6 +204,7 @@ impl NiceEguiApp for LittleMommyEditor {
                         &mut self.selected,
                         &mut self.drag,
                         &mut self.scene_rect,
+                        &mut self.geom,
                         &mut self.context_menu_pos,
                         &mut self.context_menu_world,
                     );

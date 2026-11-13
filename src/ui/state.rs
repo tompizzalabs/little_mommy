@@ -1,13 +1,18 @@
+use super::theme::{HEADER_H, NODE_W};
 use crate::engine::graph::Patch;
 use nice_plug::context::gui::GuiContext;
 
 pub const GRID_CELLS: usize = 16;
+pub const MAX_MOD_PARAMS: usize = 24;
 
-/// Spacing for the automatic node layout.
-const LAYOUT_COL_W: f32 = 240.0;
-const LAYOUT_ROW_H: f32 = 180.0;
-const LAYOUT_X0: f32 = 60.0;
-const LAYOUT_Y0: f32 = 80.0;
+const LAYOUT_COL_W: f32 = 300.0;
+const LAYOUT_ROW_H: f32 = 230.0;
+const LAYOUT_X0: f32 = 80.0;
+const LAYOUT_Y0: f32 = 90.0;
+const DEFAULT_VIEW_W: f32 = 1720.0;
+const DEFAULT_VIEW_H: f32 = 1080.0;
+const EST_SIZE: egui::Vec2 = egui::vec2(NODE_W, 210.0);
+const EST_FALLBACK: egui::Vec2 = egui::vec2(NODE_W, 210.0);
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum DragState {
@@ -16,24 +21,68 @@ pub enum DragState {
     ModCable { from: usize, current: egui::Pos2 },
 }
 
-/// Bounding rectangle of all active nodes (in world coordinates), plus a small
-/// margin. Used to initialize/reset the `Scene` view so the patch fits on screen.
-pub fn content_bbox(patch: &Patch, positions: &[egui::Pos2]) -> egui::Rect {
-    // The default view is a fixed-size world rect centered on the patch. It is
-    // deliberately larger than the window, so the initial zoom is zoomed-out
-    // (roughly 60%) instead of blown up to fill the screen.
-    const DEFAULT_VIEW_W: f32 = 1600.0;
-    const DEFAULT_VIEW_H: f32 = 1000.0;
+#[derive(Clone, Copy)]
+pub struct NodeGeom {
+    pub rect: egui::Rect,
+    pub mod_in: [egui::Pos2; MAX_MOD_PARAMS],
+    pub mod_in_n: usize,
+    pub valid: bool,
+}
 
-    let mut bbox: Option<egui::Rect> = None;
-    for (slot, cell) in patch.grid.cells.iter().enumerate() {
-        if cell.params.is_some() {
-            let r = egui::Rect::from_min_size(positions[slot], egui::vec2(200.0, 140.0));
-            bbox = Some(bbox.map_or(r, |b| b.union(r)));
+impl Default for NodeGeom {
+    fn default() -> Self {
+        Self {
+            rect: egui::Rect::from_min_size(egui::Pos2::ZERO, EST_FALLBACK),
+            mod_in: [egui::Pos2::ZERO; MAX_MOD_PARAMS],
+            mod_in_n: 0,
+            valid: false,
         }
     }
-    let content = bbox
-        .unwrap_or_else(|| egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 300.0)));
+}
+
+impl NodeGeom {
+    #[inline(always)]
+    pub fn audio_in(self, port: usize) -> egui::Pos2 {
+        egui::pos2(
+            self.rect.left(),
+            self.rect.top() + HEADER_H + 18.0 + port as f32 * 22.0,
+        )
+    }
+
+    #[inline(always)]
+    pub fn audio_out(self) -> egui::Pos2 {
+        egui::pos2(self.rect.right(), self.rect.top() + HEADER_H + 18.0)
+    }
+
+    #[inline(always)]
+    pub fn mod_out(self) -> egui::Pos2 {
+        egui::pos2(self.rect.right(), self.rect.top() + HEADER_H * 0.5)
+    }
+
+    #[inline]
+    pub fn translated(mut self, delta: egui::Vec2) -> Self {
+        self.rect = self.rect.translate(delta);
+        for p in &mut self.mod_in[..self.mod_in_n] {
+            *p += delta;
+        }
+        self
+    }
+}
+
+pub fn content_bbox(patch: &Patch, positions: &[egui::Pos2]) -> egui::Rect {
+    let mut bbox = egui::Rect::NOTHING;
+    let mut any = false;
+    for (slot, cell) in patch.grid.cells.iter().enumerate() {
+        if cell.params.is_some() {
+            bbox = bbox.union(egui::Rect::from_min_size(positions[slot], EST_SIZE));
+            any = true;
+        }
+    }
+    let content = if any {
+        bbox
+    } else {
+        egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 300.0))
+    };
     egui::Rect::from_center_size(content.center(), egui::vec2(DEFAULT_VIEW_W, DEFAULT_VIEW_H))
 }
 
@@ -47,14 +96,11 @@ impl OpenEditorState {
     }
 }
 
-/// Lay out all active cells left-to-right by audio-chain depth so freshly
-/// loaded patches (default patch, presets) don't spawn stacked on one spot.
 pub fn auto_layout(patch: &Patch, positions: &mut [egui::Pos2]) {
-    let n = patch.grid.cells.len().min(positions.len());
+    let n = patch.grid.cells.len().min(positions.len()).min(GRID_CELLS);
+    let cap = n.saturating_sub(1);
+    let mut depth = [0usize; GRID_CELLS];
 
-    // Longest-path depth from audio sources, converged iteratively.
-    // Bounded by `n` iterations, so feedback cycles can't loop forever.
-    let mut depth = vec![0usize; n];
     for _ in 0..n {
         let mut changed = false;
         for slot in 0..n {
@@ -75,6 +121,7 @@ pub fn auto_layout(patch: &Patch, positions: &mut [egui::Pos2]) {
                     }
                 }
             }
+            let d = d.min(cap);
             if d > depth[slot] {
                 depth[slot] = d;
                 changed = true;
@@ -85,13 +132,11 @@ pub fn auto_layout(patch: &Patch, positions: &mut [egui::Pos2]) {
         }
     }
 
-    // Vertical placement: one row per node, columns centered around LAYOUT_Y0.
-    let max_col = depth.iter().copied().max().unwrap_or(0);
-    let mut col_counts = vec![0usize; max_col + 1];
-    let mut col_rows = vec![0usize; max_col + 1];
+    let mut counts = [0usize; GRID_CELLS];
+    let mut rows = [0usize; GRID_CELLS];
     for slot in 0..n {
         if patch.grid.cells[slot].params.is_some() {
-            col_counts[depth[slot]] += 1;
+            counts[depth[slot]] += 1;
         }
     }
     for slot in 0..n {
@@ -99,10 +144,10 @@ pub fn auto_layout(patch: &Patch, positions: &mut [egui::Pos2]) {
             continue;
         }
         let col = depth[slot];
-        let rows = col_counts[col] as f32;
-        let idx = col_rows[col] as f32;
-        col_rows[col] += 1;
-        let y = LAYOUT_Y0 + (rows - 1.0) * 0.5 * LAYOUT_ROW_H + idx * LAYOUT_ROW_H;
-        positions[slot] = egui::pos2(LAYOUT_X0 + col as f32 * LAYOUT_COL_W, y);
+        let total = counts[col] as f32;
+        let idx = rows[col] as f32;
+        rows[col] += 1;
+        let y = LAYOUT_Y0 + idx * LAYOUT_ROW_H - (total - 1.0) * 0.5 * LAYOUT_ROW_H;
+        positions[slot] = egui::pos2(LAYOUT_X0 + col as f32 * LAYOUT_COL_W, y.max(40.0));
     }
 }
