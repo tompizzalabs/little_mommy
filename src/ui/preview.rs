@@ -23,13 +23,35 @@ const EDGE_FRAC: f32 = 0.35;
 /// UI thread, large enough to look smooth.
 const N: usize = 128;
 
+/// Vertical anchoring for a preview strip.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Baseline {
+    /// Waveforms: zero maps to the vertical middle, values in [-1, 1].
+    Center,
+    /// Envelopes: value zero sits on the bottom edge, values in [0, 1] rise up.
+    Bottom,
+}
+
 /// Shared waveform strip renderer: allocates a fixed-size rect, paints the
-/// background + centre line, then samples `sample` in order and draws the
-/// polyline, inserting crisp vertical edges at discontinuities.
+/// background + baseline, then samples `sample` in order and draws the
+/// polyline, inserting crisp vertical edges at discontinuities. Center-anchored,
+/// mirroring the classic LFO preview.
 pub fn wave_preview(
     ui: &mut egui::Ui,
     width: f32,
     color: egui::Color32,
+    sample: impl FnMut(f32) -> f32,
+) {
+    wave_preview_baseline(ui, width, color, Baseline::Center, sample);
+}
+
+/// Like [`wave_preview`], but with an explicit [`Baseline`] so envelopes can be
+/// drawn bottom-anchored while oscillators keep their centred zero line.
+pub fn wave_preview_baseline(
+    ui: &mut egui::Ui,
+    width: f32,
+    color: egui::Color32,
+    baseline: Baseline,
     mut sample: impl FnMut(f32) -> f32,
 ) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(width, PREVIEW_H), egui::Sense::hover());
@@ -43,19 +65,28 @@ pub fn wave_preview(
         egui::StrokeKind::Inside,
     );
 
-    let mid = rect.center().y;
+    let (baseline_y, amp) = match baseline {
+        Baseline::Center => (rect.center().y, rect.height() * 0.5 - 3.0),
+        Baseline::Bottom => (rect.bottom() - 3.0, rect.height() - 6.0),
+    };
     painter.line_segment(
-        [egui::pos2(rect.left(), mid), egui::pos2(rect.right(), mid)],
+        [egui::pos2(rect.left(), baseline_y), egui::pos2(rect.right(), baseline_y)],
         egui::Stroke::new(1.0, egui::Color32::from_rgb(48, 48, 58)),
     );
 
-    let amp = rect.height() * 0.5 - 3.0;
-    let mut prev_y = mid;
+    let mut prev_y = baseline_y;
     let mut pts: Vec<egui::Pos2> = Vec::with_capacity(N * 2);
     for i in 0..N {
         let t = i as f32 / (N - 1) as f32;
         let x = rect.left() + t * rect.width();
-        let y = mid - sample(t).clamp(-1.0, 1.0) * amp;
+        let v = match baseline {
+            Baseline::Center => sample(t).clamp(-1.0, 1.0),
+            Baseline::Bottom => sample(t).clamp(0.0, 1.0),
+        };
+        let y = match baseline {
+            Baseline::Center => baseline_y - v * amp,
+            Baseline::Bottom => baseline_y - v * amp,
+        };
         if i > 0 && (y - prev_y).abs() > amp * EDGE_FRAC {
             pts.push(egui::pos2(x, prev_y)); // crisp vertical edge across a discontinuity
         }
@@ -320,4 +351,51 @@ fn hash_noise(mut x: u32) -> u32 {
     x ^= x >> 17;
     x ^= x << 5;
     x
+}
+
+// -------------------------------------------------------------------------------------------------
+// Envelope (ADSR)
+// -------------------------------------------------------------------------------------------------
+
+/// ADSR preview, bottom-anchored. One cycle shows attack 0→1, decay 1→sustain,
+/// a sustain hold, then release sustain→0, all with the same exponential
+/// curvature the engine's `EnvStage` uses. Segment widths use softened times
+/// (sqrt) so even a short attack stays visible, with a fixed share reserved for
+/// the (indefinite) sustain hold.
+pub fn preview_env(
+    ui: &mut egui::Ui,
+    width: f32,
+    color: egui::Color32,
+    attack_ms: f32,
+    decay_ms: f32,
+    sustain: f32,
+    release_ms: f32,
+) {
+    let sustain = sustain.clamp(0.0, 1.0);
+
+    // Softened (sqrt) time weights; reserve a constant share for sustain.
+    let wa = attack_ms.max(0.0).sqrt();
+    let wd = decay_ms.max(0.0).sqrt();
+    let wr = release_ms.max(0.0).sqrt();
+    let ws = 0.35f32;
+    let total = (wa + wd + ws + wr).max(1e-4);
+
+    let a_end = wa / total;
+    let d_end = a_end + wd / total;
+    let s_end = d_end + ws / total;
+
+    wave_preview_baseline(ui, width, color, Baseline::Bottom, move |t| {
+        if t < a_end {
+            let x = t / a_end.max(1e-4);
+            1.0 - (-5.0 * x).exp()
+        } else if t < d_end {
+            let x = (t - a_end) / (d_end - a_end).max(1e-4);
+            sustain + (1.0 - sustain) * (-5.0 * x).exp()
+        } else if t < s_end {
+            sustain
+        } else {
+            let x = (t - s_end) / (1.0 - s_end).max(1e-4);
+            sustain * (-5.0 * x).exp()
+        }
+    });
 }

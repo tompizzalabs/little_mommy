@@ -587,6 +587,23 @@ pub fn canvas(
                                                 *modulator_ratio as f32,
                                             );
                                         }
+                                        NodeParams::Env {
+                                            attack,
+                                            decay,
+                                            sustain,
+                                            release,
+                                            ..
+                                        } => {
+                                            preview::preview_env(
+                                                ui,
+                                                NODE_W - 12.0,
+                                                base_color,
+                                                *attack,
+                                                *decay,
+                                                *sustain,
+                                                *release,
+                                            );
+                                        }
                                         _ => {}
                                     }
                                 }
