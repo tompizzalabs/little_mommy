@@ -1,4 +1,3 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard};
 
 use crate::engine::osc::aa::AntiAlias;
@@ -233,7 +232,6 @@ impl CustomLibrary {
 }
 
 static LIBRARY: OnceLock<RwLock<CustomLibrary>> = OnceLock::new();
-static LIBRARY_VERSION: AtomicU64 = AtomicU64::new(0);
 
 pub fn library() -> &'static RwLock<CustomLibrary> {
     LIBRARY.get_or_init(|| RwLock::new(CustomLibrary::default()))
@@ -241,13 +239,4 @@ pub fn library() -> &'static RwLock<CustomLibrary> {
 
 pub fn read_guard() -> RwLockReadGuard<'static, CustomLibrary> {
     library().read().unwrap_or_else(|e| e.into_inner())
-}
-
-pub fn library_version() -> u64 {
-    LIBRARY_VERSION.load(Ordering::Relaxed)
-}
-
-pub fn rescan() {
-    // Placeholder for future custom format loading.
-    LIBRARY_VERSION.fetch_add(1, Ordering::Relaxed);
 }

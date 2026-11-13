@@ -19,7 +19,6 @@ pub struct LittleMommy {
     patch: Arc<Mutex<Patch>>,
     compiled: CompiledGraph,
     compiled_version: u64,
-    compiled_lib_version: u64,
     play_mode: PlayMode,
     held_notes: Vec<u8>,
     voices: [Option<Voice>; NUM_VOICES],
@@ -36,14 +35,12 @@ impl Default for LittleMommy {
         let library = crate::engine::osc::wavetable::read_guard();
         let compiled = CompiledGraph::compile(&patch.lock().unwrap().grid.to_graph(), &library);
         let compiled_version = patch.lock().unwrap().version;
-        let compiled_lib_version = crate::engine::osc::wavetable::library_version();
 
         Self {
             params: params.clone(),
             patch: patch.clone(),
             compiled,
             compiled_version,
-            compiled_lib_version,
             play_mode: PlayMode::default(),
             held_notes: Vec::new(),
             voices: std::array::from_fn(|_| None),
@@ -266,14 +263,11 @@ impl Plugin for LittleMommy {
                     }
                 }
             }
-            let library_version = crate::engine::osc::wavetable::library_version();
-            if (patch.version != self.compiled_version
-                || library_version != self.compiled_lib_version)
+            if patch.version != self.compiled_version
                 && let Ok(library) = crate::engine::osc::wavetable::library().try_read()
             {
                 self.compiled = CompiledGraph::compile(&patch.grid.to_graph(), &library);
                 self.compiled_version = patch.version;
-                self.compiled_lib_version = library_version;
                 self.held_notes.clear();
                 self.voices.fill(None);
             }

@@ -2,7 +2,6 @@ use super::knob::Knob;
 use super::state::{auto_layout, content_bbox};
 use super::theme as th;
 use crate::engine::graph::{Grid, Patch, PlayMode};
-use crate::engine::osc::wavetable;
 use crate::params::LittleMommyParams;
 use crate::presets;
 use nice_plug::context::gui::ParamSetter;
@@ -93,24 +92,6 @@ pub fn top_bar(
     if mode != patch.play_mode {
         patch.play_mode = mode;
         patch.version = patch.version.wrapping_add(1);
-    }
-
-    child.add_space(4.0);
-    if child
-        .add(
-            egui::Button::new(
-                egui::RichText::new("RESCAN TABLES")
-                    .size(10.0)
-                    .color(th::TEXT_DIM),
-            )
-            .fill(th::WIDGET)
-            .stroke(egui::Stroke::new(1.0, th::INSET_EDGE))
-            .corner_radius(5.0)
-            .min_size(egui::vec2(0.0, 26.0)),
-        )
-        .clicked()
-    {
-        wavetable::rescan();
     }
 
     child.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
