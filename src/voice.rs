@@ -1,7 +1,6 @@
 use crate::engine::dsp::{NodeState, cent_ratio, semitone_ratio};
 use crate::engine::graph::{CompiledGraph, ModLink};
 use crate::engine::node::NodeParams;
-use crate::engine::osc::analog::DriftGenerator;
 use crate::engine::osc::unison::UnisonConfig;
 use nice_plug::util;
 
@@ -11,20 +10,6 @@ const STEAL_FADE_TIME_MS: f32 = 50.0;
 fn unison_config(params: &NodeParams) -> UnisonConfig {
     match params {
         NodeParams::Analog {
-            unison_voices,
-            unison_detune,
-            unison_detune_power,
-            unison_detune_mode,
-            unison_pan_mode,
-            unison_stack_mode,
-            unison_width,
-            unison_blend,
-            unison_swarm,
-            unison_swarm_rate,
-            unison_phase_randomization,
-            ..
-        }
-        | NodeParams::Wave {
             unison_voices,
             unison_detune,
             unison_detune_power,
@@ -108,17 +93,13 @@ impl Voice {
                 ((seed_base.wrapping_add(index as u32) % 991) as f32) / 991.0 * 512.0;
             state.lfo.sh_value =
                 ((seed_base.wrapping_add(index as u32 * 3) % 401) as f32) / 401.0 * 2.0 - 1.0;
-            state.fm.carrier.phase = ((seed_base.wrapping_add(index as u32) % 971) as f32) / 971.0;
-            state.fm.modulator.phase =
-                ((seed_base.wrapping_add(index as u32 * 11) % 971) as f32) / 971.0;
-            state.pm.carrier.phase = ((seed_base.wrapping_add(index as u32) % 967) as f32) / 967.0;
-            state.pm.modulator.phase =
-                ((seed_base.wrapping_add(index as u32 * 13) % 967) as f32) / 967.0;
             state.unison.seed(
                 seed_base
                     .wrapping_mul(0x9E37_79B9)
                     .wrapping_add(index as u32 * 0x5BF0_3635) as u64,
             );
+            state.fm.seed(seed_base, index as u32);
+            state.pm.seed(seed_base, index as u32);
             for (v_idx, analog_voice) in state.analog.iter_mut().enumerate() {
                 analog_voice.phase = ((seed_base
                     .wrapping_add(index as u32)
@@ -126,19 +107,12 @@ impl Voice {
                     % 997) as f32)
                     / 997.0;
                 analog_voice.duty_smooth = 0.5;
-                analog_voice.drift = DriftGenerator::new(
+                analog_voice.drift = crate::engine::osc::drift::DriftGenerator::new(
                     seed_base
                         .wrapping_mul(0xC2B2AE35)
                         .wrapping_add(index as u32 * 0x27D4EB2F)
                         .wrapping_add(v_idx as u32 * 0x165667B1),
                 );
-            }
-            for (v_idx, wave_phase) in state.wave_phases.iter_mut().enumerate() {
-                *wave_phase = ((seed_base
-                    .wrapping_add(index as u32)
-                    .wrapping_add(v_idx as u32 * 17)
-                    % 991) as f32)
-                    / 991.0;
             }
             state.env_stage = crate::engine::dsp::EnvStage::Attack;
             state.env_value = 0.0;
@@ -227,89 +201,60 @@ impl Voice {
                     let (nl, nr) = state.noise(*color);
                     (nl * level, nr * level)
                 }
-                NodeParams::Wave { .. } => {
-                    let pos = modulated(&node.params, links, &mod_values, 0);
-                    let semis = modulated(&node.params, links, &mod_values, 1);
-                    let det = modulated(&node.params, links, &mod_values, 2);
-                    let form = modulated(&node.params, links, &mod_values, 3);
-                    let skh = modulated(&node.params, links, &mod_values, 4);
-                    let skv = modulated(&node.params, links, &mod_values, 5);
-                    let sat = modulated(&node.params, links, &mod_values, 6);
-                    let ud = modulated(&node.params, links, &mod_values, 7);
-                    let udp = modulated(&node.params, links, &mod_values, 8);
-                    let freq = base_freq * semitone_ratio(semis) * cent_ratio(det);
-                    let mut uni = unison_config(&node.params);
-                    uni.detune = ud;
-                    uni.detune_power = udp;
-                    match &node.table_source {
-                        Some(source) => state.wave(
-                            source, freq, sample_rate, pos, form, skh, skv, sat, &uni,
-                        ),
-                        None => (0.0, 0.0),
-                    }
-                }
                 NodeParams::Fm { .. } => {
-                    let cp = modulated(&node.params, links, &mod_values, 0);
-                    let mp = modulated(&node.params, links, &mod_values, 1);
-                    let semis = modulated(&node.params, links, &mod_values, 2);
-                    let det = modulated(&node.params, links, &mod_values, 3);
-                    let amt = modulated(&node.params, links, &mod_values, 4);
+                    let semis = modulated(&node.params, links, &mod_values, 0);
+                    let det = modulated(&node.params, links, &mod_values, 1);
+                    let amt = modulated(&node.params, links, &mod_values, 2);
+                    let dr = modulated(&node.params, links, &mod_values, 3);
                     let freq = base_freq * semitone_ratio(semis) * cent_ratio(det);
                     if let NodeParams::Fm {
+                        carrier_wave,
+                        modulator_wave,
                         carrier_ratio,
                         modulator_ratio,
                         exponential,
                         ..
                     } = &node.params
                     {
-                        let s = &node.pair_sources;
-                        match (&s[0], &s[1]) {
-                            (Some(carrier), Some(modulator)) => state.fm(
-                                carrier,
-                                modulator,
-                                freq,
-                                sample_rate,
-                                cp,
-                                mp,
-                                amt,
-                                *carrier_ratio as f32,
-                                *modulator_ratio as f32,
-                                *exponential,
-                            ),
-                            _ => (0.0, 0.0),
-                        }
+                        state.fm(
+                            *carrier_wave,
+                            *modulator_wave,
+                            freq,
+                            sample_rate,
+                            amt,
+                            *carrier_ratio as f32,
+                            *modulator_ratio as f32,
+                            *exponential,
+                            dr,
+                        )
                     } else {
                         (0.0, 0.0)
                     }
                 }
                 NodeParams::Pm { .. } => {
-                    let cp = modulated(&node.params, links, &mod_values, 0);
-                    let mp = modulated(&node.params, links, &mod_values, 1);
-                    let semis = modulated(&node.params, links, &mod_values, 2);
-                    let det = modulated(&node.params, links, &mod_values, 3);
-                    let amt = modulated(&node.params, links, &mod_values, 4);
+                    let semis = modulated(&node.params, links, &mod_values, 0);
+                    let det = modulated(&node.params, links, &mod_values, 1);
+                    let amt = modulated(&node.params, links, &mod_values, 2);
+                    let dr = modulated(&node.params, links, &mod_values, 3);
                     let freq = base_freq * semitone_ratio(semis) * cent_ratio(det);
                     if let NodeParams::Pm {
+                        carrier_wave,
+                        modulator_wave,
                         carrier_ratio,
                         modulator_ratio,
                         ..
                     } = &node.params
                     {
-                        let s = &node.pair_sources;
-                        match (&s[0], &s[1]) {
-                            (Some(carrier), Some(modulator)) => state.pm(
-                                carrier,
-                                modulator,
-                                freq,
-                                sample_rate,
-                                cp,
-                                mp,
-                                amt,
-                                *carrier_ratio as f32,
-                                *modulator_ratio as f32,
-                            ),
-                            _ => (0.0, 0.0),
-                        }
+                        state.pm(
+                            *carrier_wave,
+                            *modulator_wave,
+                            freq,
+                            sample_rate,
+                            amt,
+                            *carrier_ratio as f32,
+                            *modulator_ratio as f32,
+                            dr,
+                        )
                     } else {
                         (0.0, 0.0)
                     }

@@ -1,11 +1,11 @@
 pub mod analog_tables;
-pub mod drift;
-pub use drift::DriftGenerator;
+
+pub use super::drift::DriftGenerator;
+pub use super::drift::DRIFT_RANGE_SEMITONES;
 
 use analog_tables::TABLE_LEN;
 
 pub const SQUARE_VOLUME_SCALAR: f32 = 0.3;
-pub const DRIFT_RANGE_SEMITONES: f32 = 0.2;
 pub const PWM_SMOOTH_FACTOR: f32 = 0.999;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

@@ -1,5 +1,4 @@
 use crate::engine::node::{Node, NodeParams};
-use crate::engine::osc::{CustomLibrary, TableSource, wavetable};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -246,8 +245,6 @@ impl Default for Grid {
 pub struct CompiledNode {
     pub params: NodeParams,
     pub inputs: [Option<u32>; 2],
-    pub table_source: Option<TableSource>,
-    pub pair_sources: [Option<TableSource>; 2],
     pub mod_links: Vec<ModLink>,
 }
 
@@ -265,7 +262,7 @@ impl CompiledGraph {
         }
     }
 
-    pub fn compile(graph: &Graph, library: &CustomLibrary) -> Self {
+    pub fn compile(graph: &Graph) -> Self {
         let mut memo: HashMap<u32, u32> = HashMap::new();
         let mut stack: Vec<u32> = Vec::new();
 
@@ -310,34 +307,9 @@ impl CompiledGraph {
                 }
             }
 
-            let (table_source, pair_sources) = match &source.params {
-                NodeParams::Wave { table, .. } => {
-                    (Some(wavetable::resolve(table, library)), Default::default())
-                }
-                NodeParams::Fm {
-                    carrier_table,
-                    modulator_table,
-                    ..
-                }
-                | NodeParams::Pm {
-                    carrier_table,
-                    modulator_table,
-                    ..
-                } => (
-                    None,
-                    [
-                        Some(wavetable::resolve(carrier_table, library)),
-                        Some(wavetable::resolve(modulator_table, library)),
-                    ],
-                ),
-                _ => (None, Default::default()),
-            };
-
             nodes.push(CompiledNode {
                 params: source.params.clone(),
                 inputs,
-                table_source,
-                pair_sources,
                 mod_links,
             });
         }

@@ -340,7 +340,6 @@ pub enum Glyph {
     Lfo,
     Fm,
     Pm,
-    Table,
     Generic,
 }
 
@@ -348,7 +347,6 @@ pub fn glyph_for(params: Option<&NodeParams>) -> Glyph {
     match params {
         Some(NodeParams::Analog { .. }) => Glyph::Saw,
         Some(NodeParams::Noise { .. }) => Glyph::Noise,
-        Some(NodeParams::Wave { .. }) => Glyph::Table,
         Some(NodeParams::Lfo { .. }) => Glyph::Lfo,
         Some(NodeParams::Fm { .. }) => Glyph::Fm,
         Some(NodeParams::Pm { .. }) => Glyph::Pm,
@@ -419,17 +417,6 @@ pub fn draw_glyph(painter: &egui::Painter, rect: Rect, glyph: Glyph, color: Colo
             ],
             stroke,
         ),
-        Glyph::Table => {
-            let mut v = Vec::with_capacity(3);
-            for k in 0..3 {
-                let s = 0.35 + k as f32 * 0.28;
-                v.push(Shape::line(
-                    wave(&|t| (t * std::f32::consts::TAU).sin() * s, 20),
-                    Stroke::new(width, alpha(color, 90 + k as u8 * 70)),
-                ));
-            }
-            Shape::Vec(v)
-        }
         Glyph::Fm => Shape::line(
             wave(&|t| (t * std::f32::consts::TAU * (1.0 + 2.2 * t)).sin(), 40),
             stroke,

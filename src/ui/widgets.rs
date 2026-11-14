@@ -1,12 +1,10 @@
 //! Reusable widgets and label/color formatting helpers.
 
 use crate::engine::node::{NodeKind, NodeParams};
-use crate::engine::osc::{StockTable, TableSel};
 
-pub const KIND_LIST: [NodeKind; 11] = [
+pub const KIND_LIST: [NodeKind; 10] = [
     NodeKind::Analog,
     NodeKind::Noise,
-    NodeKind::Wave,
     NodeKind::Fm,
     NodeKind::Pm,
     NodeKind::Mix,
@@ -22,7 +20,6 @@ pub fn kind_color(params: Option<&NodeParams>) -> egui::Color32 {
         None => egui::Color32::from_rgb(70, 70, 78),
         Some(NodeKind::Analog) => egui::Color32::from_rgb(70, 110, 170),
         Some(NodeKind::Noise) => egui::Color32::from_rgb(110, 110, 118),
-        Some(NodeKind::Wave) => egui::Color32::from_rgb(120, 90, 165),
         Some(NodeKind::Fm) => egui::Color32::from_rgb(180, 100, 130),
         Some(NodeKind::Pm) => egui::Color32::from_rgb(160, 110, 190),
         Some(NodeKind::Mix) => egui::Color32::from_rgb(80, 140, 95),
@@ -40,7 +37,6 @@ pub fn kind_label(kind: Option<NodeKind>) -> String {
         Some(k) => match k {
             NodeKind::Analog => "ANALOG",
             NodeKind::Noise => "NOISE",
-            NodeKind::Wave => "WAVE",
             NodeKind::Fm => "FM",
             NodeKind::Pm => "PM",
             NodeKind::Mix => "MIX",
@@ -52,15 +48,4 @@ pub fn kind_label(kind: Option<NodeKind>) -> String {
         }
         .to_string(),
     }
-}
-
-pub fn table_label(sel: &TableSel) -> String {
-    match sel {
-        TableSel::Custom(name) => name.clone(),
-        TableSel::Stock(stock) => format!("stock: {}", stock),
-    }
-}
-
-pub fn stock_label(stock: &StockTable) -> String {
-    format!("stock: {}", stock)
 }

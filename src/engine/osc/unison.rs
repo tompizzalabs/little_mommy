@@ -29,11 +29,7 @@ pub enum DetuneMode {
 }
 
 impl DetuneMode {
-    pub const ALL: [DetuneMode; 3] = [
-        DetuneMode::Power,
-        DetuneMode::Random,
-        DetuneMode::Analog,
-    ];
+    pub const ALL: [DetuneMode; 3] = [DetuneMode::Power, DetuneMode::Random, DetuneMode::Analog];
 }
 
 impl std::fmt::Display for DetuneMode {
@@ -319,8 +315,7 @@ impl UnisonEngine {
         // Swarm rate lives outside the layout: re-derive only the rotation
         // steps when it changes, so rate modulation never rebuilds anything.
         if self.swarm_rate_hz != config.swarm_rate_hz {
-            let step_angle =
-                TAU * config.swarm_rate_hz / finite(sample_rate).max(1.0);
+            let step_angle = TAU * config.swarm_rate_hz / finite(sample_rate).max(1.0);
             let (step_sin, step_cos) = step_angle.sin_cos();
 
             for voice in self.voices.iter_mut() {
@@ -353,7 +348,10 @@ impl UnisonEngine {
                     + movement * self.swarm_detune_cents,
             )
         } else {
-            (voice.base_pan, voice.detune_position * detune * max_detune_cents)
+            (
+                voice.base_pan,
+                voice.detune_position * detune * max_detune_cents,
+            )
         };
 
         let pitch_multiplier = cents_to_ratio(cents + voice.stack_semitones * 100.0);
@@ -654,11 +652,7 @@ fn stack_interval(index: usize, mode: StackMode) -> f32 {
 
 #[inline(always)]
 fn finite(value: f32) -> f32 {
-    if value.is_finite() {
-        value
-    } else {
-        0.0
-    }
+    if value.is_finite() { value } else { 0.0 }
 }
 
 /// Small xorshift RNG — deterministic, dependency-free, seeded per node.
@@ -670,11 +664,7 @@ struct Random {
 impl Random {
     fn new(seed: u64) -> Self {
         Self {
-            state: if seed == 0 {
-                0x9E3779B97F4A7C15
-            } else {
-                seed
-            },
+            state: if seed == 0 { 0x9E3779B97F4A7C15 } else { seed },
         }
     }
 

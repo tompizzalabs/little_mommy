@@ -1,6 +1,6 @@
 use crate::engine::graph::{Grid, InputSel, Patch, PlayMode};
 use crate::engine::node::NodeParams;
-use crate::engine::osc::{AnalogShape, NoiseColor, StockTable, TableSel, unison};
+use crate::engine::osc::{AnalogShape, NoiseColor, OperatorWave, unison};
 
 pub struct Preset {
     pub name: &'static str,
@@ -113,15 +113,12 @@ fn pad_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
-            NodeParams::Wave {
-                table: TableSel::Stock(StockTable::Morph),
-                position: 0.4,
+            NodeParams::Analog {
+                shape: AnalogShape::Saw,
                 semitones: 0.0,
                 detune: -7.0,
-                formant: 1.0,
-                skew_horizontal: 0.0,
-                skew_vertical: 0.0,
-                saturation: 0.0,
+                pulse_width: 0.5,
+                drift: 0.0,
                 unison_voices: 3,
                 unison_detune: 0.4,
                 unison_detune_power: 1.0,
@@ -217,16 +214,15 @@ fn fm_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
         (
             0,
             NodeParams::Fm {
-                carrier_table: TableSel::Stock(StockTable::Harmonics),
-                modulator_table: TableSel::Stock(StockTable::Harmonics),
-                carrier_position: 0.3,
-                modulator_position: 0.3,
+                carrier_wave: OperatorWave::Sine,
+                modulator_wave: OperatorWave::Sine,
                 semitones: 0.0,
                 detune: 0.0,
                 amount: 0.3,
                 carrier_ratio: 1,
                 modulator_ratio: 2,
                 exponential: true,
+                drift: 0.0,
             },
             InputSel::None,
             InputSel::None,

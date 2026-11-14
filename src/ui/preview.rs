@@ -1,10 +1,9 @@
 use super::theme as th;
-use crate::engine::dsp;
 use crate::engine::lfo::LfoShape;
 use crate::engine::osc::analog::SQUARE_VOLUME_SCALAR;
 use crate::engine::osc::analog::analog_tables::{self, TABLE_LEN, table_index};
 use crate::engine::osc::fm::pitch_shift_multiplier;
-use crate::engine::osc::wavetable::TableSource;
+use crate::engine::osc::OperatorWave;
 use crate::engine::osc::{AnalogShape, NoiseColor, NoiseState};
 use egui::{Color32, Pos2, Rect, Sense, Shape, Stroke, pos2, vec2};
 
@@ -146,35 +145,17 @@ pub fn preview_analog(
     wave_preview(ui, width, color, move |t| read(table, t * TLEN));
 }
 
+/// One table read for an operator wave, at an arbitrary phase in [0, 1).
 #[inline(always)]
-fn wave_sample(
-    source: &TableSource,
-    position: f32,
-    formant: f32,
-    skew_h: f32,
-    skew_v: f32,
-    saturation: f32,
-    phase: f32,
-) -> f32 {
-    let shaped = dsp::shape_phase(phase, formant, skew_h);
-    dsp::shape_amplitude(source.sample(shaped, position), skew_v, saturation)
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn preview_wave(
-    ui: &mut egui::Ui,
-    width: f32,
-    color: Color32,
-    source: &TableSource,
-    position: f32,
-    formant: f32,
-    skew_h: f32,
-    skew_v: f32,
-    saturation: f32,
-) {
-    wave_preview(ui, width, color, |t| {
-        wave_sample(source, position, formant, skew_h, skew_v, saturation, t)
-    });
+fn operator_sample(wave: OperatorWave, phase: f32) -> f32 {
+    let tables = analog_tables::get();
+    let idx = table_index(440.0);
+    let pos = phase.rem_euclid(1.0) * TLEN;
+    match wave {
+        OperatorWave::Saw => read(&tables.saw[idx], pos),
+        OperatorWave::Triangle => read(&tables.triangle[idx], pos),
+        OperatorWave::Sine => read(&tables.sine, pos),
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -182,10 +163,8 @@ pub fn preview_fm(
     ui: &mut egui::Ui,
     width: f32,
     color: Color32,
-    carrier: &TableSource,
-    modulator: &TableSource,
-    c_pos: f32,
-    m_pos: f32,
+    carrier: OperatorWave,
+    modulator: OperatorWave,
     amount: f32,
     c_ratio: f32,
     m_ratio: f32,
@@ -200,14 +179,14 @@ pub fn preview_fm(
     wave_preview(ui, width, color, move |t| {
         let dt = (t - last_t).max(0.0);
         last_t = t;
-        let mv = modulator.sample((t * mf).fract(), m_pos);
+        let mv = operator_sample(modulator, t * mf);
         let mult = if exponential {
             pitch_shift_multiplier(mv * semis)
         } else {
             1.0 + mv * lin
         };
         phase += mult * dt;
-        carrier.sample(phase.rem_euclid(1.0), c_pos)
+        operator_sample(carrier, phase)
     });
 }
 
@@ -216,18 +195,16 @@ pub fn preview_pm(
     ui: &mut egui::Ui,
     width: f32,
     color: Color32,
-    carrier: &TableSource,
-    modulator: &TableSource,
-    c_pos: f32,
-    m_pos: f32,
+    carrier: OperatorWave,
+    modulator: OperatorWave,
     amount: f32,
     c_ratio: f32,
     m_ratio: f32,
 ) {
     let mf = m_ratio / c_ratio.max(0.0001);
     wave_preview(ui, width, color, move |t| {
-        let mv = modulator.sample((t * mf).fract(), m_pos);
-        carrier.sample((t + amount * mv).rem_euclid(1.0), c_pos)
+        let mv = operator_sample(modulator, t * mf);
+        operator_sample(carrier, (t + amount * mv).rem_euclid(1.0))
     });
 }
 

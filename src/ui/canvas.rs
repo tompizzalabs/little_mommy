@@ -3,11 +3,11 @@ use super::preview;
 use super::shape;
 use super::state::{DragState, MAX_MOD_PARAMS, NodeGeom, ensure_scratch};
 use super::theme::{self as th, BODY_W, Glyph, HEADER_H, NODE_W, PAD};
-use super::widgets::{KIND_LIST, kind_label, stock_label, table_label};
+use super::widgets::{KIND_LIST, kind_label};
 use crate::engine::graph::{InputSel, ModLink, Patch};
 use crate::engine::lfo::LfoShape;
 use crate::engine::node::{NodeKind, NodeParams, ParamDef};
-use crate::engine::osc::{AnalogShape, NoiseColor, StockTable, TableSel, unison, wavetable};
+use crate::engine::osc::{AnalogShape, NoiseColor, OperatorWave, unison};
 use egui::{Color32, Pos2, Rect, Sense, Shape, Stroke, pos2, vec2};
 use std::sync::OnceLock;
 const ZOOM_MIN: f32 = 0.25;
@@ -39,6 +39,12 @@ const DETUNE_MODE_OPTIONS: [(unison::DetuneMode, &str); 3] = [
     (unison::DetuneMode::Power, "CURVE"),
     (unison::DetuneMode::Random, "RAND"),
     (unison::DetuneMode::Analog, "ANLG"),
+];
+
+const OPERATOR_WAVE_OPTIONS: [(OperatorWave, &str); 3] = [
+    (OperatorWave::Saw, "SAW"),
+    (OperatorWave::Triangle, "TRI"),
+    (OperatorWave::Sine, "SIN"),
 ];
 
 struct PaletteEntry {
@@ -107,7 +113,6 @@ pub fn canvas(
     ensure_scratch(patch, positions, geom);
     let n_cells = patch.grid.cells.len();
 
-    let lib = wavetable::read_guard();
     let kinds: Vec<Option<NodeKind>> = patch
         .grid
         .cells
@@ -249,7 +254,7 @@ pub fn canvas(
                                         ui.set_width(BODY_W);
                                         ui.spacing_mut().item_spacing = vec2(5.0, 5.0);
                                         if let Some(np) = cell.params.as_mut() {
-                                            kind_controls(ui, np, accent, &lib, slot, &mut dirty);
+                                            kind_controls(ui, np, accent, slot, &mut dirty);
                                         }
                                         let defs: &'static [ParamDef] = cell
                                             .params
@@ -710,7 +715,6 @@ fn kind_controls(
     ui: &mut egui::Ui,
     np: &mut NodeParams,
     accent: Color32,
-    lib: &wavetable::CustomLibrary,
     slot: usize,
     dirty: &mut bool,
 ) {
@@ -775,81 +779,45 @@ fn kind_controls(
             }
             preview::preview_noise(ui, BODY_W, accent, *color, slot as u32);
         }
-        NodeParams::Wave {
-            table,
-            position,
-            formant,
-            skew_horizontal,
-            skew_vertical,
-            saturation,
-            unison_voices,
-            unison_stack_mode,
-            unison_pan_mode,
-            unison_detune_mode,
-            ..
-        } => {
-            *dirty |= table_picker(ui, "wave_table", table, lib, "");
-            let src = wavetable::resolve(table, lib);
-            preview::preview_wave(
-                ui,
-                BODY_W,
-                accent,
-                &src,
-                *position,
-                *formant,
-                *skew_horizontal,
-                *skew_vertical,
-                *saturation,
-            );
-            knob::section_label(ui, "UNISON VOICES");
-            *dirty |= knob::segmented(ui, "wave_voices", unison_voices, &VOICE_OPTIONS, accent);
-            *dirty |= knob::segmented(ui, "wave_stack", unison_stack_mode, &STACK_OPTIONS, accent);
-            *dirty |= knob::segmented(
-                ui,
-                "wave_pan_mode",
-                unison_pan_mode,
-                &PAN_MODE_OPTIONS,
-                accent,
-            );
-            *dirty |= knob::segmented(
-                ui,
-                "wave_detune_mode",
-                unison_detune_mode,
-                &DETUNE_MODE_OPTIONS,
-                accent,
-            );
-        }
         NodeParams::Lfo { shape, .. } => {
             *dirty |= shape::wave_shape_picker(ui, "lfo_shape", shape, &LfoShape::ALL, accent);
             preview::preview_lfo(ui, BODY_W, accent, *shape);
         }
         NodeParams::Fm {
-            carrier_table,
-            modulator_table,
-            carrier_position,
-            modulator_position,
+            carrier_wave,
+            modulator_wave,
             amount,
             carrier_ratio,
             modulator_ratio,
             exponential,
             ..
         } => {
-            *dirty |= table_picker(ui, "fm_carrier", carrier_table, lib, "C  ");
-            *dirty |= table_picker(ui, "fm_mod", modulator_table, lib, "M  ");
+            knob::section_label(ui, "CARRIER");
+            *dirty |= knob::segmented(
+                ui,
+                "fm_c_wave",
+                carrier_wave,
+                &OPERATOR_WAVE_OPTIONS,
+                accent,
+            );
+            knob::section_label(ui, "MODULATOR");
+            *dirty |= knob::segmented(
+                ui,
+                "fm_m_wave",
+                modulator_wave,
+                &OPERATOR_WAVE_OPTIONS,
+                accent,
+            );
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing = vec2(4.0, 0.0);
                 *dirty |= knob::chip(ui, "fm_exp", exponential, "EXP FM", accent);
             });
-            let c = wavetable::resolve(carrier_table, lib);
-            let m = wavetable::resolve(modulator_table, lib);
             preview::preview_fm(
                 ui,
                 BODY_W,
                 accent,
-                &c,
-                &m,
-                *carrier_position,
-                *modulator_position,
+                *carrier_wave,
+                *modulator_wave,
                 *amount,
                 *carrier_ratio as f32,
                 *modulator_ratio as f32,
@@ -868,27 +836,35 @@ fn kind_controls(
             });
         }
         NodeParams::Pm {
-            carrier_table,
-            modulator_table,
-            carrier_position,
-            modulator_position,
+            carrier_wave,
+            modulator_wave,
             amount,
             carrier_ratio,
             modulator_ratio,
             ..
         } => {
-            *dirty |= table_picker(ui, "pm_carrier", carrier_table, lib, "C  ");
-            *dirty |= table_picker(ui, "pm_mod", modulator_table, lib, "M  ");
-            let c = wavetable::resolve(carrier_table, lib);
-            let m = wavetable::resolve(modulator_table, lib);
+            knob::section_label(ui, "CARRIER");
+            *dirty |= knob::segmented(
+                ui,
+                "pm_c_wave",
+                carrier_wave,
+                &OPERATOR_WAVE_OPTIONS,
+                accent,
+            );
+            knob::section_label(ui, "MODULATOR");
+            *dirty |= knob::segmented(
+                ui,
+                "pm_m_wave",
+                modulator_wave,
+                &OPERATOR_WAVE_OPTIONS,
+                accent,
+            );
             preview::preview_pm(
                 ui,
                 BODY_W,
                 accent,
-                &c,
-                &m,
-                *carrier_position,
-                *modulator_position,
+                *carrier_wave,
+                *modulator_wave,
                 *amount,
                 *carrier_ratio as f32,
                 *modulator_ratio as f32,
@@ -915,44 +891,6 @@ fn kind_controls(
             preview::preview_env(ui, BODY_W, accent, *attack, *decay, *sustain, *release);
         }
         _ => {}
-    }
-}
-
-fn table_picker(
-    ui: &mut egui::Ui,
-    id: &str,
-    table: &mut TableSel,
-    lib: &wavetable::CustomLibrary,
-    prefix: &str,
-) -> bool {
-    let mut sel = table.clone();
-    let label = table_label(&sel);
-    let text: String = if prefix.is_empty() {
-        label.into()
-    } else {
-        format!("{prefix}{label}")
-    };
-    egui::ComboBox::from_id_salt(id)
-        .selected_text(text)
-        .width(BODY_W)
-        .height(220.0)
-        .show_ui(ui, |ui| {
-            ui.spacing_mut().item_spacing = vec2(4.0, 2.0);
-            for t in lib.tables.iter() {
-                ui.selectable_value(&mut sel, TableSel::Custom(t.name.clone()), t.name.clone());
-            }
-            if !lib.tables.is_empty() {
-                ui.separator();
-            }
-            for s in StockTable::ALL {
-                ui.selectable_value(&mut sel, TableSel::Stock(s), stock_label(&s));
-            }
-        });
-    if sel != *table {
-        *table = sel;
-        true
-    } else {
-        false
     }
 }
 

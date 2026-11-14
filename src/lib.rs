@@ -32,8 +32,7 @@ impl Default for LittleMommy {
     fn default() -> Self {
         let params = Arc::new(LittleMommyParams::default());
         let patch = params.patch.clone();
-        let library = crate::engine::osc::wavetable::read_guard();
-        let compiled = CompiledGraph::compile(&patch.lock().unwrap().grid.to_graph(), &library);
+        let compiled = CompiledGraph::compile(&patch.lock().unwrap().grid.to_graph());
         let compiled_version = patch.lock().unwrap().version;
 
         Self {
@@ -263,10 +262,8 @@ impl Plugin for LittleMommy {
                     }
                 }
             }
-            if patch.version != self.compiled_version
-                && let Ok(library) = crate::engine::osc::wavetable::library().try_read()
-            {
-                self.compiled = CompiledGraph::compile(&patch.grid.to_graph(), &library);
+            if patch.version != self.compiled_version {
+                self.compiled = CompiledGraph::compile(&patch.grid.to_graph());
                 self.compiled_version = patch.version;
                 self.held_notes.clear();
                 self.voices.fill(None);

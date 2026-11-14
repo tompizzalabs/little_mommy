@@ -1,6 +1,6 @@
 # Little Mommy III
 
-**Modular Node-Based synthesizer**
+**Modular Node-Based Analog Synthesizer**
 <img width="1040" height="660" alt="image" src="https://github.com/user-attachments/assets/ba8cbceb-7342-493d-94c6-b7bf46bf80ce" />
 
 
@@ -10,7 +10,6 @@ I'll break your ribs and ass bone ( not a threat )
 
 ## Feature status
 
-
 ### Oscillators
 
 Analog - very simple, does their job nicely but they can have a BIG upgrade
@@ -18,8 +17,6 @@ Analog - very simple, does their job nicely but they can have a BIG upgrade
 FM - Does the job nicely, but needs serious upgrades too
 
 PM - Potential for some crazy, but you gotta tinker..
-
-Wavetable - He didn't start well, but we have ideas on how to make him a NUKE
 
 ### Presets
 There are no reading and writing presets, at the moment presets we have are just hardcoded, preset part 

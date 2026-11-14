@@ -1,7 +1,7 @@
 use crate::engine::lfo::LfoShape;
 use crate::engine::osc::{
-    AnalogShape, NoiseColor, TableSel, wavetable,
-    unison::{DetuneMode, PanMode, StackMode},
+    AnalogShape, NoiseColor, unison::{DetuneMode, PanMode, StackMode},
+    OperatorWave,
 };
 use serde::{Deserialize, Serialize};
 
@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 pub enum NodeKind {
     Analog,
     Noise,
-    Wave,
     Fm,
     Pm,
     Mix,
@@ -89,89 +88,7 @@ const NOISE_DEFS: &[ParamDef] = &[ParamDef {
     min: 0.0,
     max: 1.0,
 }];
-const WAVE_DEFS: &[ParamDef] = &[
-    ParamDef {
-        name: "Pos",
-        min: 0.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "Semi",
-        min: -24.0,
-        max: 24.0,
-    },
-    ParamDef {
-        name: "Detune",
-        min: -100.0,
-        max: 100.0,
-    },
-    ParamDef {
-        name: "Form",
-        min: 0.25,
-        max: 4.0,
-    },
-    ParamDef {
-        name: "SkewH",
-        min: -0.95,
-        max: 0.95,
-    },
-    ParamDef {
-        name: "SkewV",
-        min: -0.9,
-        max: 0.9,
-    },
-    ParamDef {
-        name: "Sat",
-        min: 0.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "Uni Det",
-        min: 0.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "Det Pwr",
-        min: -5.0,
-        max: 5.0,
-    },
-    ParamDef {
-        name: "Width",
-        min: 0.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "Blend",
-        min: -1.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "Swarm",
-        min: 0.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "Swarm Rt",
-        min: 0.0,
-        max: 5.0,
-    },
-    ParamDef {
-        name: "Phase R",
-        min: 0.0,
-        max: 1.0,
-    },
-];
 const FM_DEFS: &[ParamDef] = &[
-    ParamDef {
-        name: "C Pos",
-        min: 0.0,
-        max: 1.0,
-    },
-    ParamDef {
-        name: "M Pos",
-        min: 0.0,
-        max: 1.0,
-    },
     ParamDef {
         name: "Semi",
         min: -24.0,
@@ -184,6 +101,11 @@ const FM_DEFS: &[ParamDef] = &[
     },
     ParamDef {
         name: "Amount",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Drift",
         min: 0.0,
         max: 1.0,
     },
@@ -266,49 +188,26 @@ pub enum NodeParams {
         color: NoiseColor,
         level: f32,
     },
-    Wave {
-        table: TableSel,
-        position: f32,
-        semitones: f32,
-        detune: f32,
-        formant: f32,
-        skew_horizontal: f32,
-        skew_vertical: f32,
-        saturation: f32,
-        unison_voices: u8,
-        unison_detune: f32,
-        unison_detune_power: f32,
-        unison_detune_mode: DetuneMode,
-        unison_pan_mode: PanMode,
-        unison_stack_mode: StackMode,
-        unison_width: f32,
-        unison_blend: f32,
-        unison_swarm: f32,
-        unison_swarm_rate: f32,
-        unison_phase_randomization: f32,
-    },
     Fm {
-        carrier_table: TableSel,
-        modulator_table: TableSel,
-        carrier_position: f32,
-        modulator_position: f32,
+        carrier_wave: OperatorWave,
+        modulator_wave: OperatorWave,
         semitones: f32,
         detune: f32,
         amount: f32,
         carrier_ratio: u8,
         modulator_ratio: u8,
         exponential: bool,
+        drift: f32,
     },
     Pm {
-        carrier_table: TableSel,
-        modulator_table: TableSel,
-        carrier_position: f32,
-        modulator_position: f32,
+        carrier_wave: OperatorWave,
+        modulator_wave: OperatorWave,
         semitones: f32,
         detune: f32,
         amount: f32,
         carrier_ratio: u8,
         modulator_ratio: u8,
+        drift: f32,
     },
     Mix,
     Filter {
@@ -363,49 +262,26 @@ impl NodeParams {
                 color: NoiseColor::White,
                 level: 0.2,
             },
-            NodeKind::Wave => NodeParams::Wave {
-                table: wavetable::default_sel(),
-                position: 0.35,
-                semitones: 0.0,
-                detune: 0.0,
-                formant: 1.0,
-                skew_horizontal: 0.0,
-                skew_vertical: 0.0,
-                saturation: 0.0,
-                unison_voices: 1,
-                unison_detune: 0.0,
-                unison_detune_power: 0.0,
-                unison_detune_mode: DetuneMode::Power,
-                unison_pan_mode: PanMode::Linear,
-                unison_stack_mode: StackMode::Unison,
-                unison_width: 1.0,
-                unison_blend: 0.0,
-                unison_swarm: 0.0,
-                unison_swarm_rate: 0.15,
-                unison_phase_randomization: 0.0,
-            },
             NodeKind::Fm => NodeParams::Fm {
-                carrier_table: wavetable::default_sel(),
-                modulator_table: wavetable::default_sel(),
-                carrier_position: 0.5,
-                modulator_position: 0.5,
+                carrier_wave: OperatorWave::Sine,
+                modulator_wave: OperatorWave::Sine,
                 semitones: 0.0,
                 detune: 0.0,
                 amount: 0.2,
                 carrier_ratio: 1,
                 modulator_ratio: 2,
                 exponential: false,
+                drift: 0.0,
             },
             NodeKind::Pm => NodeParams::Pm {
-                carrier_table: wavetable::default_sel(),
-                modulator_table: wavetable::default_sel(),
-                carrier_position: 0.5,
-                modulator_position: 0.5,
+                carrier_wave: OperatorWave::Sine,
+                modulator_wave: OperatorWave::Sine,
                 semitones: 0.0,
                 detune: 0.0,
                 amount: 0.2,
                 carrier_ratio: 1,
                 modulator_ratio: 2,
+                drift: 0.0,
             },
             NodeKind::Mix => NodeParams::Mix,
             NodeKind::Filter => NodeParams::Filter {
@@ -432,7 +308,6 @@ impl NodeParams {
         match self {
             NodeParams::Analog { .. } => NodeKind::Analog,
             NodeParams::Noise { .. } => NodeKind::Noise,
-            NodeParams::Wave { .. } => NodeKind::Wave,
             NodeParams::Fm { .. } => NodeKind::Fm,
             NodeParams::Pm { .. } => NodeKind::Pm,
             NodeParams::Mix => NodeKind::Mix,
@@ -448,7 +323,6 @@ impl NodeParams {
         match self {
             NodeParams::Analog { .. }
             | NodeParams::Noise { .. }
-            | NodeParams::Wave { .. }
             | NodeParams::Fm { .. }
             | NodeParams::Pm { .. }
             | NodeParams::Lfo { .. } => 0,
@@ -464,7 +338,6 @@ impl NodeParams {
         match self.kind() {
             NodeKind::Analog => "ANALOG",
             NodeKind::Noise => "NOISE",
-            NodeKind::Wave => "WAVE",
             NodeKind::Fm => "FM",
             NodeKind::Pm => "PM",
             NodeKind::Mix => "MIX",
@@ -480,7 +353,6 @@ impl NodeParams {
         match self {
             NodeParams::Analog { .. } => ANALOG_DEFS,
             NodeParams::Noise { .. } => NOISE_DEFS,
-            NodeParams::Wave { .. } => WAVE_DEFS,
             NodeParams::Fm { .. } => FM_DEFS,
             NodeParams::Pm { .. } => PM_DEFS,
             NodeParams::Mix => EMPTY_DEFS,
@@ -518,67 +390,14 @@ impl NodeParams {
                 10,
             ) => *unison_phase_randomization,
             (NodeParams::Noise { level, .. }, 0) => *level,
-            (NodeParams::Wave { position, .. }, 0) => *position,
-            (NodeParams::Wave { semitones, .. }, 1) => *semitones,
-            (NodeParams::Wave { detune, .. }, 2) => *detune,
-            (NodeParams::Wave { formant, .. }, 3) => *formant,
-            (
-                NodeParams::Wave {
-                    skew_horizontal, ..
-                },
-                4,
-            ) => *skew_horizontal,
-            (NodeParams::Wave { skew_vertical, .. }, 5) => *skew_vertical,
-            (NodeParams::Wave { saturation, .. }, 6) => *saturation,
-            (NodeParams::Wave { unison_detune, .. }, 7) => *unison_detune,
-            (
-                NodeParams::Wave {
-                    unison_detune_power,
-                    ..
-                },
-                8,
-            ) => *unison_detune_power,
-            (NodeParams::Wave { unison_width, .. }, 9) => *unison_width,
-            (NodeParams::Wave { unison_blend, .. }, 10) => *unison_blend,
-            (NodeParams::Wave { unison_swarm, .. }, 11) => *unison_swarm,
-            (NodeParams::Wave { unison_swarm_rate, .. }, 12) => *unison_swarm_rate,
-            (
-                NodeParams::Wave {
-                    unison_phase_randomization,
-                    ..
-                },
-                13,
-            ) => *unison_phase_randomization,
-            (
-                NodeParams::Fm {
-                    carrier_position, ..
-                },
-                0,
-            ) => *carrier_position,
-            (
-                NodeParams::Fm {
-                    modulator_position, ..
-                },
-                1,
-            ) => *modulator_position,
-            (NodeParams::Fm { semitones, .. }, 2) => *semitones,
-            (NodeParams::Fm { detune, .. }, 3) => *detune,
-            (NodeParams::Fm { amount, .. }, 4) => *amount,
-            (
-                NodeParams::Pm {
-                    carrier_position, ..
-                },
-                0,
-            ) => *carrier_position,
-            (
-                NodeParams::Pm {
-                    modulator_position, ..
-                },
-                1,
-            ) => *modulator_position,
-            (NodeParams::Pm { semitones, .. }, 2) => *semitones,
-            (NodeParams::Pm { detune, .. }, 3) => *detune,
-            (NodeParams::Pm { amount, .. }, 4) => *amount,
+            (NodeParams::Fm { semitones, .. }, 0) => *semitones,
+            (NodeParams::Fm { detune, .. }, 1) => *detune,
+            (NodeParams::Fm { amount, .. }, 2) => *amount,
+            (NodeParams::Fm { drift, .. }, 3) => *drift,
+            (NodeParams::Pm { semitones, .. }, 0) => *semitones,
+            (NodeParams::Pm { detune, .. }, 1) => *detune,
+            (NodeParams::Pm { amount, .. }, 2) => *amount,
+            (NodeParams::Pm { drift, .. }, 3) => *drift,
             (NodeParams::Filter { cutoff, .. }, 0) => *cutoff,
             (NodeParams::Filter { resonance, .. }, 1) => *resonance,
             (NodeParams::Env { attack, .. }, 0) => *attack,
@@ -618,67 +437,14 @@ impl NodeParams {
                 10,
             ) => *unison_phase_randomization = v,
             (NodeParams::Noise { level, .. }, 0) => *level = v,
-            (NodeParams::Wave { position, .. }, 0) => *position = v,
-            (NodeParams::Wave { semitones, .. }, 1) => *semitones = v,
-            (NodeParams::Wave { detune, .. }, 2) => *detune = v,
-            (NodeParams::Wave { formant, .. }, 3) => *formant = v,
-            (
-                NodeParams::Wave {
-                    skew_horizontal, ..
-                },
-                4,
-            ) => *skew_horizontal = v,
-            (NodeParams::Wave { skew_vertical, .. }, 5) => *skew_vertical = v,
-            (NodeParams::Wave { saturation, .. }, 6) => *saturation = v,
-            (NodeParams::Wave { unison_detune, .. }, 7) => *unison_detune = v,
-            (
-                NodeParams::Wave {
-                    unison_detune_power,
-                    ..
-                },
-                8,
-            ) => *unison_detune_power = v,
-            (NodeParams::Wave { unison_width, .. }, 9) => *unison_width = v,
-            (NodeParams::Wave { unison_blend, .. }, 10) => *unison_blend = v,
-            (NodeParams::Wave { unison_swarm, .. }, 11) => *unison_swarm = v,
-            (NodeParams::Wave { unison_swarm_rate, .. }, 12) => *unison_swarm_rate = v,
-            (
-                NodeParams::Wave {
-                    unison_phase_randomization,
-                    ..
-                },
-                13,
-            ) => *unison_phase_randomization = v,
-            (
-                NodeParams::Fm {
-                    carrier_position, ..
-                },
-                0,
-            ) => *carrier_position = v,
-            (
-                NodeParams::Fm {
-                    modulator_position, ..
-                },
-                1,
-            ) => *modulator_position = v,
-            (NodeParams::Fm { semitones, .. }, 2) => *semitones = v,
-            (NodeParams::Fm { detune, .. }, 3) => *detune = v,
-            (NodeParams::Fm { amount, .. }, 4) => *amount = v,
-            (
-                NodeParams::Pm {
-                    carrier_position, ..
-                },
-                0,
-            ) => *carrier_position = v,
-            (
-                NodeParams::Pm {
-                    modulator_position, ..
-                },
-                1,
-            ) => *modulator_position = v,
-            (NodeParams::Pm { semitones, .. }, 2) => *semitones = v,
-            (NodeParams::Pm { detune, .. }, 3) => *detune = v,
-            (NodeParams::Pm { amount, .. }, 4) => *amount = v,
+            (NodeParams::Fm { semitones, .. }, 0) => *semitones = v,
+            (NodeParams::Fm { detune, .. }, 1) => *detune = v,
+            (NodeParams::Fm { amount, .. }, 2) => *amount = v,
+            (NodeParams::Fm { drift, .. }, 3) => *drift = v,
+            (NodeParams::Pm { semitones, .. }, 0) => *semitones = v,
+            (NodeParams::Pm { detune, .. }, 1) => *detune = v,
+            (NodeParams::Pm { amount, .. }, 2) => *amount = v,
+            (NodeParams::Pm { drift, .. }, 3) => *drift = v,
             (NodeParams::Filter { cutoff, .. }, 0) => *cutoff = v,
             (NodeParams::Filter { resonance, .. }, 1) => *resonance = v,
             (NodeParams::Env { attack, .. }, 0) => *attack = v,

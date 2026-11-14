@@ -8,4 +8,4 @@ pub use dsp::{EnvStage, NodeState};
 pub use graph::{CompiledGraph, CompiledNode, Edge, Graph, Patch};
 pub use lfo::{LfoShape, LfoState};
 pub use node::{Node, NodeKind, NodeParams};
-pub use osc::{AnalogShape, AnalogVoiceState, NoiseColor, wavetable};
+pub use osc::{AnalogShape, AnalogVoiceState, NoiseColor};
