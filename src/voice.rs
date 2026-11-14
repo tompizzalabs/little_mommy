@@ -2,9 +2,57 @@ use crate::engine::dsp::{NodeState, cent_ratio, semitone_ratio};
 use crate::engine::graph::{CompiledGraph, ModLink};
 use crate::engine::node::NodeParams;
 use crate::engine::osc::analog::DriftGenerator;
+use crate::engine::osc::unison::UnisonConfig;
 use nice_plug::util;
 
 const STEAL_FADE_TIME_MS: f32 = 50.0;
+
+/// Gather the unison parameters shared by all unison-capable oscillators.
+fn unison_config(params: &NodeParams) -> UnisonConfig {
+    match params {
+        NodeParams::Analog {
+            unison_voices,
+            unison_detune,
+            unison_detune_power,
+            unison_detune_mode,
+            unison_pan_mode,
+            unison_stack_mode,
+            unison_width,
+            unison_blend,
+            unison_swarm,
+            unison_swarm_rate,
+            unison_phase_randomization,
+            ..
+        }
+        | NodeParams::Wave {
+            unison_voices,
+            unison_detune,
+            unison_detune_power,
+            unison_detune_mode,
+            unison_pan_mode,
+            unison_stack_mode,
+            unison_width,
+            unison_blend,
+            unison_swarm,
+            unison_swarm_rate,
+            unison_phase_randomization,
+            ..
+        } => UnisonConfig {
+            voices: *unison_voices,
+            detune: *unison_detune,
+            detune_power: *unison_detune_power,
+            detune_mode: *unison_detune_mode,
+            pan_mode: *unison_pan_mode,
+            stack_mode: *unison_stack_mode,
+            width: *unison_width,
+            blend: *unison_blend,
+            swarm: *unison_swarm,
+            swarm_rate_hz: *unison_swarm_rate,
+            phase_randomization: *unison_phase_randomization,
+        },
+        _ => UnisonConfig::default(),
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Voice {
@@ -66,6 +114,11 @@ impl Voice {
             state.pm.carrier.phase = ((seed_base.wrapping_add(index as u32) % 967) as f32) / 967.0;
             state.pm.modulator.phase =
                 ((seed_base.wrapping_add(index as u32 * 13) % 967) as f32) / 967.0;
+            state.unison.seed(
+                seed_base
+                    .wrapping_mul(0x9E37_79B9)
+                    .wrapping_add(index as u32 * 0x5BF0_3635) as u64,
+            );
             for (v_idx, analog_voice) in state.analog.iter_mut().enumerate() {
                 analog_voice.phase = ((seed_base
                     .wrapping_add(index as u32)
@@ -156,11 +209,7 @@ impl Voice {
             let links = &node.mod_links;
 
             let (l, r) = match &node.params {
-                NodeParams::Analog {
-                    shape,
-                    unison_voices,
-                    ..
-                } => {
+                NodeParams::Analog { shape, .. } => {
                     let semis = modulated(&node.params, links, &mod_values, 0);
                     let det = modulated(&node.params, links, &mod_values, 1);
                     let pw = modulated(&node.params, links, &mod_values, 2);
@@ -168,18 +217,17 @@ impl Voice {
                     let ud = modulated(&node.params, links, &mod_values, 4);
                     let udp = modulated(&node.params, links, &mod_values, 5);
                     let freq = base_freq * semitone_ratio(semis) * cent_ratio(det);
-                    state.analog(*shape, freq, sample_rate, pw, dr, *unison_voices, ud, udp)
+                    let mut uni = unison_config(&node.params);
+                    uni.detune = ud;
+                    uni.detune_power = udp;
+                    state.analog(*shape, freq, sample_rate, pw, dr, &uni)
                 }
                 NodeParams::Noise { color, .. } => {
                     let level = modulated(&node.params, links, &mod_values, 0);
                     let (nl, nr) = state.noise(*color);
                     (nl * level, nr * level)
                 }
-                NodeParams::Wave {
-                    table: _,
-                    unison_voices,
-                    ..
-                } => {
+                NodeParams::Wave { .. } => {
                     let pos = modulated(&node.params, links, &mod_values, 0);
                     let semis = modulated(&node.params, links, &mod_values, 1);
                     let det = modulated(&node.params, links, &mod_values, 2);
@@ -190,19 +238,12 @@ impl Voice {
                     let ud = modulated(&node.params, links, &mod_values, 7);
                     let udp = modulated(&node.params, links, &mod_values, 8);
                     let freq = base_freq * semitone_ratio(semis) * cent_ratio(det);
+                    let mut uni = unison_config(&node.params);
+                    uni.detune = ud;
+                    uni.detune_power = udp;
                     match &node.table_source {
                         Some(source) => state.wave(
-                            source,
-                            freq,
-                            sample_rate,
-                            pos,
-                            form,
-                            skh,
-                            skv,
-                            sat,
-                            *unison_voices,
-                            ud,
-                            udp,
+                            source, freq, sample_rate, pos, form, skh, skv, sat, &uni,
                         ),
                         None => (0.0, 0.0),
                     }
@@ -334,6 +375,7 @@ impl Voice {
         for state in self.states.iter_mut() {
             state.env_stage = crate::engine::dsp::EnvStage::Attack;
             state.env_value = 0.0;
+            state.retrigger_unison();
         }
     }
 }

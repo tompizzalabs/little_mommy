@@ -7,7 +7,7 @@ use super::widgets::{KIND_LIST, kind_label, stock_label, table_label};
 use crate::engine::graph::{InputSel, ModLink, Patch};
 use crate::engine::lfo::LfoShape;
 use crate::engine::node::{NodeKind, NodeParams, ParamDef};
-use crate::engine::osc::{AnalogShape, NoiseColor, StockTable, TableSel, wavetable};
+use crate::engine::osc::{AnalogShape, NoiseColor, StockTable, TableSel, unison, wavetable};
 use egui::{Color32, Pos2, Rect, Sense, Shape, Stroke, pos2, vec2};
 use std::sync::OnceLock;
 const ZOOM_MIN: f32 = 0.25;
@@ -19,6 +19,27 @@ const HIT_MOD_SQ: f32 = 64.0;
 const HIT_PORT_SQ: f32 = 121.0;
 
 const VOICE_OPTIONS: [(u8, &str); 5] = [(1, "1"), (2, "2"), (4, "4"), (8, "8"), (16, "16")];
+
+const STACK_OPTIONS: [(unison::StackMode, &str); 4] = [
+    (unison::StackMode::Unison, "UNI"),
+    (unison::StackMode::Octaves, "OCT"),
+    (unison::StackMode::Fifths, "5TH"),
+    (unison::StackMode::OctavesAndFifths, "OCT+5"),
+];
+
+const PAN_MODE_OPTIONS: [(unison::PanMode, &str); 5] = [
+    (unison::PanMode::Linear, "LIN"),
+    (unison::PanMode::Center, "CEN"),
+    (unison::PanMode::Outer, "OUT"),
+    (unison::PanMode::Alternating, "ALT"),
+    (unison::PanMode::Random, "RND"),
+];
+
+const DETUNE_MODE_OPTIONS: [(unison::DetuneMode, &str); 3] = [
+    (unison::DetuneMode::Power, "CURVE"),
+    (unison::DetuneMode::Random, "RAND"),
+    (unison::DetuneMode::Analog, "ANLG"),
+];
 
 struct PaletteEntry {
     kind: NodeKind,
@@ -635,7 +656,7 @@ pub fn canvas(
 }
 fn center_detented(name: &str) -> bool {
     let n = name.to_ascii_lowercase();
-    ["pan", "balance", "skew", "bias", "detune"]
+    ["pan", "balance", "skew", "bias", "detune", "blend"]
         .iter()
         .any(|k| n.contains(k))
 }
@@ -698,6 +719,9 @@ fn kind_controls(
             shape,
             pulse_width,
             unison_voices,
+            unison_stack_mode,
+            unison_pan_mode,
+            unison_detune_mode,
             ..
         } => {
             *dirty |= knob::glyph_row(
@@ -715,6 +739,27 @@ fn kind_controls(
             preview::preview_analog(ui, BODY_W, accent, *shape, *pulse_width);
             knob::section_label(ui, "UNISON VOICES");
             *dirty |= knob::segmented(ui, "analog_voices", unison_voices, &VOICE_OPTIONS, accent);
+            *dirty |= knob::segmented(
+                ui,
+                "analog_stack",
+                unison_stack_mode,
+                &STACK_OPTIONS,
+                accent,
+            );
+            *dirty |= knob::segmented(
+                ui,
+                "analog_pan_mode",
+                unison_pan_mode,
+                &PAN_MODE_OPTIONS,
+                accent,
+            );
+            *dirty |= knob::segmented(
+                ui,
+                "analog_detune_mode",
+                unison_detune_mode,
+                &DETUNE_MODE_OPTIONS,
+                accent,
+            );
         }
         NodeParams::Noise { color, .. } => {
             let mut idx = NoiseColor::ALL.iter().position(|c| c == color).unwrap_or(0);
@@ -738,6 +783,9 @@ fn kind_controls(
             skew_vertical,
             saturation,
             unison_voices,
+            unison_stack_mode,
+            unison_pan_mode,
+            unison_detune_mode,
             ..
         } => {
             *dirty |= table_picker(ui, "wave_table", table, lib, "");
@@ -755,6 +803,21 @@ fn kind_controls(
             );
             knob::section_label(ui, "UNISON VOICES");
             *dirty |= knob::segmented(ui, "wave_voices", unison_voices, &VOICE_OPTIONS, accent);
+            *dirty |= knob::segmented(ui, "wave_stack", unison_stack_mode, &STACK_OPTIONS, accent);
+            *dirty |= knob::segmented(
+                ui,
+                "wave_pan_mode",
+                unison_pan_mode,
+                &PAN_MODE_OPTIONS,
+                accent,
+            );
+            *dirty |= knob::segmented(
+                ui,
+                "wave_detune_mode",
+                unison_detune_mode,
+                &DETUNE_MODE_OPTIONS,
+                accent,
+            );
         }
         NodeParams::Lfo { shape, .. } => {
             *dirty |= shape::wave_shape_picker(ui, "lfo_shape", shape, &LfoShape::ALL, accent);

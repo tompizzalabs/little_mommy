@@ -4,6 +4,7 @@ use crate::engine::{
         AnalogShape, AnalogVoiceState, FmState, MAX_UNISON_VOICES, NoiseColor, PmState,
         TableSource, aa, noise, unison,
     },
+    osc::unison::{MAX_DETUNE_CENTS, UnisonConfig},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -18,6 +19,7 @@ pub enum EnvStage {
 
 #[derive(Debug, Clone)]
 pub struct NodeState {
+    pub unison: unison::UnisonEngine,
     pub analog: [AnalogVoiceState; MAX_UNISON_VOICES],
     pub noise: noise::NoiseState,
     pub wave_phases: [f32; MAX_UNISON_VOICES],
@@ -36,6 +38,7 @@ pub struct NodeState {
 impl Default for NodeState {
     fn default() -> Self {
         Self {
+            unison: unison::UnisonEngine::default(),
             analog: std::array::from_fn(|_| AnalogVoiceState::default()),
             noise: noise::NoiseState::default(),
             wave_phases: [0.0; MAX_UNISON_VOICES],
@@ -63,27 +66,24 @@ impl NodeState {
         sample_rate: f32,
         pulse_width: f32,
         drift: f32,
-        unison_voices: u8,
-        unison_detune: f32,
-        unison_detune_power: f32,
+        unison: &UnisonConfig,
     ) -> (f32, f32) {
-        let voices = unison_voices.max(1).min(MAX_UNISON_VOICES as u8);
-        let multipliers = unison::detune_multipliers(voices, unison_detune_power);
-        let positions = unison::pan_positions(voices);
-        let comp = unison::gain_compensation(voices);
-        let max_detune_cents = 50.0;
+        self.unison.sync(*unison, sample_rate);
+        let voices = self.unison.voice_count();
 
         let mut left = 0.0;
         let mut right = 0.0;
-        for i in 0..voices as usize {
-            let detune_cents = multipliers[i] * unison_detune * max_detune_cents;
-            let voice_freq = freq * 2.0f32.powf(detune_cents / 1200.0);
-            let (gain_l, gain_r) = unison::pan_gains(positions[i]);
-            let sample = self.analog[i].next(shape, voice_freq, sample_rate, pulse_width, drift);
-            left += sample * gain_l;
-            right += sample * gain_r;
+        for i in 0..voices {
+            let frame = self.unison.frame(i, unison.detune, MAX_DETUNE_CENTS);
+            let voice_freq = freq * frame.pitch_multiplier;
+            let sample =
+                self.analog[i]
+                    .next(shape, voice_freq, sample_rate, pulse_width, drift);
+            left += sample * frame.gain_left;
+            right += sample * frame.gain_right;
         }
-        (left * comp, right * comp)
+        self.unison.tick();
+        (left, right)
     }
     #[allow(clippy::too_many_arguments)]
     pub fn wave(
@@ -96,25 +96,19 @@ impl NodeState {
         skew_horizontal: f32,
         skew_vertical: f32,
         saturation: f32,
-        unison_voices: u8,
-        unison_detune: f32,
-        unison_detune_power: f32,
+        unison: &UnisonConfig,
     ) -> (f32, f32) {
         if sample_rate <= 0.0 {
             return (0.0, 0.0);
         }
-        let voices = unison_voices.max(1).min(MAX_UNISON_VOICES as u8);
-        let multipliers = unison::detune_multipliers(voices, unison_detune_power);
-        let positions = unison::pan_positions(voices);
-        let comp = unison::gain_compensation(voices);
-        let max_detune_cents = 50.0;
+        self.unison.sync(*unison, sample_rate);
+        let voices = self.unison.voice_count();
 
         let mut left = 0.0;
         let mut right = 0.0;
-        for i in 0..voices as usize {
-            let detune_cents = multipliers[i] * unison_detune * max_detune_cents;
-            let voice_freq = freq * 2.0f32.powf(detune_cents / 1200.0);
-            let (gain_l, gain_r) = unison::pan_gains(positions[i]);
+        for i in 0..voices {
+            let frame = self.unison.frame(i, unison.detune, MAX_DETUNE_CENTS);
+            let voice_freq = freq * frame.pitch_multiplier;
             let oversampled_rate = sample_rate * 3.0;
             let mut up = [0.0f32; 3];
             for slot in up.iter_mut() {
@@ -127,10 +121,26 @@ impl NodeState {
                 }
             }
             let sample = self.wave_aa[i].process(up);
-            left += sample * gain_l;
-            right += sample * gain_r;
+            left += sample * frame.gain_left;
+            right += sample * frame.gain_right;
         }
-        (left * comp, right * comp)
+        self.unison.tick();
+        (left, right)
+    }
+
+    /// Re-randomize unison voice phases on note retrigger, scaled by the
+    /// phase randomization amount from the last sync. Zero amount keeps the
+    /// oscillators free-running.
+    pub fn retrigger_unison(&mut self) {
+        if self.unison.phase_randomization() <= 0.0 {
+            return;
+        }
+
+        let offsets = self.unison.reroll_phase_offsets();
+        for (i, offset) in offsets.iter().enumerate().take(self.unison.voice_count()) {
+            self.analog[i].phase = *offset;
+            self.wave_phases[i] = *offset;
+        }
     }
 
     pub fn noise(&mut self, color: NoiseColor) -> (f32, f32) {

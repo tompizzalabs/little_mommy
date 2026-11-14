@@ -1,5 +1,8 @@
 use crate::engine::lfo::LfoShape;
-use crate::engine::osc::{AnalogShape, NoiseColor, TableSel, wavetable};
+use crate::engine::osc::{
+    AnalogShape, NoiseColor, TableSel, wavetable,
+    unison::{DetuneMode, PanMode, StackMode},
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,6 +58,31 @@ const ANALOG_DEFS: &[ParamDef] = &[
         min: -5.0,
         max: 5.0,
     },
+    ParamDef {
+        name: "Width",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Blend",
+        min: -1.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Swarm",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Swarm Rt",
+        min: 0.0,
+        max: 5.0,
+    },
+    ParamDef {
+        name: "Phase R",
+        min: 0.0,
+        max: 1.0,
+    },
 ];
 const NOISE_DEFS: &[ParamDef] = &[ParamDef {
     name: "Level",
@@ -106,6 +134,31 @@ const WAVE_DEFS: &[ParamDef] = &[
         name: "Det Pwr",
         min: -5.0,
         max: 5.0,
+    },
+    ParamDef {
+        name: "Width",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Blend",
+        min: -1.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Swarm",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Swarm Rt",
+        min: 0.0,
+        max: 5.0,
+    },
+    ParamDef {
+        name: "Phase R",
+        min: 0.0,
+        max: 1.0,
     },
 ];
 const FM_DEFS: &[ParamDef] = &[
@@ -200,6 +253,14 @@ pub enum NodeParams {
         unison_voices: u8,
         unison_detune: f32,
         unison_detune_power: f32,
+        unison_detune_mode: DetuneMode,
+        unison_pan_mode: PanMode,
+        unison_stack_mode: StackMode,
+        unison_width: f32,
+        unison_blend: f32,
+        unison_swarm: f32,
+        unison_swarm_rate: f32,
+        unison_phase_randomization: f32,
     },
     Noise {
         color: NoiseColor,
@@ -217,6 +278,14 @@ pub enum NodeParams {
         unison_voices: u8,
         unison_detune: f32,
         unison_detune_power: f32,
+        unison_detune_mode: DetuneMode,
+        unison_pan_mode: PanMode,
+        unison_stack_mode: StackMode,
+        unison_width: f32,
+        unison_blend: f32,
+        unison_swarm: f32,
+        unison_swarm_rate: f32,
+        unison_phase_randomization: f32,
     },
     Fm {
         carrier_table: TableSel,
@@ -281,6 +350,14 @@ impl NodeParams {
                 unison_voices: 1,
                 unison_detune: 0.0,
                 unison_detune_power: 0.0,
+                unison_detune_mode: DetuneMode::Power,
+                unison_pan_mode: PanMode::Linear,
+                unison_stack_mode: StackMode::Unison,
+                unison_width: 1.0,
+                unison_blend: 0.0,
+                unison_swarm: 0.0,
+                unison_swarm_rate: 0.15,
+                unison_phase_randomization: 0.0,
             },
             NodeKind::Noise => NodeParams::Noise {
                 color: NoiseColor::White,
@@ -298,6 +375,14 @@ impl NodeParams {
                 unison_voices: 1,
                 unison_detune: 0.0,
                 unison_detune_power: 0.0,
+                unison_detune_mode: DetuneMode::Power,
+                unison_pan_mode: PanMode::Linear,
+                unison_stack_mode: StackMode::Unison,
+                unison_width: 1.0,
+                unison_blend: 0.0,
+                unison_swarm: 0.0,
+                unison_swarm_rate: 0.15,
+                unison_phase_randomization: 0.0,
             },
             NodeKind::Fm => NodeParams::Fm {
                 carrier_table: wavetable::default_sel(),
@@ -421,6 +506,17 @@ impl NodeParams {
                 },
                 5,
             ) => *unison_detune_power,
+            (NodeParams::Analog { unison_width, .. }, 6) => *unison_width,
+            (NodeParams::Analog { unison_blend, .. }, 7) => *unison_blend,
+            (NodeParams::Analog { unison_swarm, .. }, 8) => *unison_swarm,
+            (NodeParams::Analog { unison_swarm_rate, .. }, 9) => *unison_swarm_rate,
+            (
+                NodeParams::Analog {
+                    unison_phase_randomization,
+                    ..
+                },
+                10,
+            ) => *unison_phase_randomization,
             (NodeParams::Noise { level, .. }, 0) => *level,
             (NodeParams::Wave { position, .. }, 0) => *position,
             (NodeParams::Wave { semitones, .. }, 1) => *semitones,
@@ -442,6 +538,17 @@ impl NodeParams {
                 },
                 8,
             ) => *unison_detune_power,
+            (NodeParams::Wave { unison_width, .. }, 9) => *unison_width,
+            (NodeParams::Wave { unison_blend, .. }, 10) => *unison_blend,
+            (NodeParams::Wave { unison_swarm, .. }, 11) => *unison_swarm,
+            (NodeParams::Wave { unison_swarm_rate, .. }, 12) => *unison_swarm_rate,
+            (
+                NodeParams::Wave {
+                    unison_phase_randomization,
+                    ..
+                },
+                13,
+            ) => *unison_phase_randomization,
             (
                 NodeParams::Fm {
                     carrier_position, ..
@@ -499,6 +606,17 @@ impl NodeParams {
                 },
                 5,
             ) => *unison_detune_power = v,
+            (NodeParams::Analog { unison_width, .. }, 6) => *unison_width = v,
+            (NodeParams::Analog { unison_blend, .. }, 7) => *unison_blend = v,
+            (NodeParams::Analog { unison_swarm, .. }, 8) => *unison_swarm = v,
+            (NodeParams::Analog { unison_swarm_rate, .. }, 9) => *unison_swarm_rate = v,
+            (
+                NodeParams::Analog {
+                    unison_phase_randomization,
+                    ..
+                },
+                10,
+            ) => *unison_phase_randomization = v,
             (NodeParams::Noise { level, .. }, 0) => *level = v,
             (NodeParams::Wave { position, .. }, 0) => *position = v,
             (NodeParams::Wave { semitones, .. }, 1) => *semitones = v,
@@ -520,6 +638,17 @@ impl NodeParams {
                 },
                 8,
             ) => *unison_detune_power = v,
+            (NodeParams::Wave { unison_width, .. }, 9) => *unison_width = v,
+            (NodeParams::Wave { unison_blend, .. }, 10) => *unison_blend = v,
+            (NodeParams::Wave { unison_swarm, .. }, 11) => *unison_swarm = v,
+            (NodeParams::Wave { unison_swarm_rate, .. }, 12) => *unison_swarm_rate = v,
+            (
+                NodeParams::Wave {
+                    unison_phase_randomization,
+                    ..
+                },
+                13,
+            ) => *unison_phase_randomization = v,
             (
                 NodeParams::Fm {
                     carrier_position, ..
