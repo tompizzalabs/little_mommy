@@ -8,19 +8,10 @@ pub fn pitch_shift_multiplier(semitones: f32) -> f32 {
     (0.057_762_265 * semitones).exp()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FmState {
     pub carrier: OperatorVoice,
     pub modulator: OperatorVoice,
-}
-
-impl Default for FmState {
-    fn default() -> Self {
-        Self {
-            carrier: OperatorVoice::default(),
-            modulator: OperatorVoice::default(),
-        }
-    }
 }
 
 impl FmState {

@@ -79,39 +79,46 @@ impl Voice {
         let mut states: Box<[NodeState]> = vec![NodeState::default(); num_nodes].into_boxed_slice();
 
         for (index, state) in states.iter_mut().enumerate() {
+            let idx = index as u32;
             state.noise.seed(
                 seed_base
                     .wrapping_mul(0x9E3779B9)
-                    .wrapping_add(index as u32 * 0x85EBCA6B),
+                    .wrapping_add(idx.wrapping_mul(0x85EBCA6B)),
             );
             state.lfo.rng = fastrand::Rng::with_seed(
                 seed_base
                     .wrapping_mul(0x2545_F491)
-                    .wrapping_add(index as u32 * 7 + 1) as u64,
+                    .wrapping_add(idx.wrapping_mul(7).wrapping_add(1)) as u64,
             );
             state.lfo.read_index =
-                ((seed_base.wrapping_add(index as u32) % 991) as f32) / 991.0 * 512.0;
+                ((seed_base.wrapping_add(idx) % 991) as f32) / 991.0 * 512.0;
             state.lfo.sh_value =
-                ((seed_base.wrapping_add(index as u32 * 3) % 401) as f32) / 401.0 * 2.0 - 1.0;
+                ((seed_base.wrapping_add(idx.wrapping_mul(3)) % 401) as f32) / 401.0 * 2.0 - 1.0;
             state.unison.seed(
                 seed_base
                     .wrapping_mul(0x9E37_79B9)
-                    .wrapping_add(index as u32 * 0x5BF0_3635) as u64,
+                    .wrapping_add(idx.wrapping_mul(0x5BF0_3635)) as u64,
             );
-            state.fm.seed(seed_base, index as u32);
-            state.pm.seed(seed_base, index as u32);
+            state.fm.seed(seed_base, idx);
+            state.pm.seed(seed_base, idx);
+            state.vector.seed(
+                seed_base
+                    .wrapping_mul(0x6A09_E667)
+                    .wrapping_add(idx.wrapping_mul(0xBB67_AE85)),
+            );
             for (v_idx, analog_voice) in state.analog.iter_mut().enumerate() {
+                let v = v_idx as u32;
                 analog_voice.phase = ((seed_base
-                    .wrapping_add(index as u32)
-                    .wrapping_add(v_idx as u32 * 13)
+                    .wrapping_add(idx)
+                    .wrapping_add(v.wrapping_mul(13))
                     % 997) as f32)
                     / 997.0;
                 analog_voice.duty_smooth = 0.5;
                 analog_voice.drift = crate::engine::osc::drift::DriftGenerator::new(
                     seed_base
                         .wrapping_mul(0xC2B2AE35)
-                        .wrapping_add(index as u32 * 0x27D4EB2F)
-                        .wrapping_add(v_idx as u32 * 0x165667B1),
+                        .wrapping_add(idx.wrapping_mul(0x27D4EB2F))
+                        .wrapping_add(v.wrapping_mul(0x165667B1)),
                 );
             }
             state.env_stage = crate::engine::dsp::EnvStage::Attack;
@@ -258,6 +265,15 @@ impl Voice {
                     } else {
                         (0.0, 0.0)
                     }
+                }
+                NodeParams::Vector { .. } => {
+                    let x = modulated(&node.params, links, &mod_values, 0);
+                    let y = modulated(&node.params, links, &mod_values, 1);
+                    let semis = modulated(&node.params, links, &mod_values, 2);
+                    let det = modulated(&node.params, links, &mod_values, 3);
+                    let dr = modulated(&node.params, links, &mod_values, 4);
+                    let freq = base_freq * semitone_ratio(semis) * cent_ratio(det);
+                    state.vector(freq, sample_rate, x, y, dr)
                 }
                 NodeParams::Mix => (in0_l + in1_l, in0_r + in1_r),
                 NodeParams::Filter { .. } => {

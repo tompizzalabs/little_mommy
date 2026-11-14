@@ -158,6 +158,27 @@ fn operator_sample(wave: OperatorWave, phase: f32) -> f32 {
     }
 }
 
+/// The vector pad's morph at a static X/Y position.
+pub fn preview_vector(ui: &mut egui::Ui, width: f32, color: Color32, x: f32, y: f32) {
+    let x = x.clamp(0.0, 1.0);
+    let y = y.clamp(0.0, 1.0);
+    let tables = analog_tables::get();
+    let idx = table_index(440.0);
+    let saw = &tables.saw[idx];
+    let tri = &tables.triangle[idx];
+    let sine = &tables.sine;
+    wave_preview(ui, width, color, move |t| {
+        let pos = t * TLEN;
+        let e0 = read(saw, pos);
+        let e1 = read(tri, pos);
+        let e2 = read(sine, pos);
+        let e3 = -e0;
+        let lower = (1.0 - x) * e0 + x * e3;
+        let upper = (1.0 - x) * e1 + x * e2;
+        (1.0 - y) * lower + y * upper
+    });
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn preview_fm(
     ui: &mut egui::Ui,

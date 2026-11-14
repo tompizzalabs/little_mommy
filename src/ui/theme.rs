@@ -340,6 +340,7 @@ pub enum Glyph {
     Lfo,
     Fm,
     Pm,
+    Vector,
     Generic,
 }
 
@@ -350,6 +351,7 @@ pub fn glyph_for(params: Option<&NodeParams>) -> Glyph {
         Some(NodeParams::Lfo { .. }) => Glyph::Lfo,
         Some(NodeParams::Fm { .. }) => Glyph::Fm,
         Some(NodeParams::Pm { .. }) => Glyph::Pm,
+        Some(NodeParams::Vector { .. }) => Glyph::Vector,
         Some(NodeParams::Env { .. }) => Glyph::Env,
         _ => Glyph::Generic,
     }
@@ -431,6 +433,23 @@ pub fn draw_glyph(painter: &egui::Painter, rect: Rect, glyph: Glyph, color: Colo
             ),
             stroke,
         ),
+        Glyph::Vector => Shape::Vec(vec![
+            Shape::rect_stroke(
+                r,
+                2.0,
+                Stroke::new(width, alpha(color, 120)),
+                egui::StrokeKind::Inside,
+            ),
+            Shape::line_segment(
+                [p(0.5, 0.0), p(0.5, 1.0)],
+                Stroke::new(1.0, alpha(color, 70)),
+            ),
+            Shape::line_segment(
+                [p(0.0, 0.5), p(1.0, 0.5)],
+                Stroke::new(1.0, alpha(color, 70)),
+            ),
+            Shape::circle_filled(p(0.68, 0.32), 2.4, color),
+        ]),
         Glyph::Generic => Shape::Vec(vec![
             Shape::circle_stroke(r.center(), r.height() * 0.42, stroke),
             Shape::circle_filled(r.center(), 1.8, color),

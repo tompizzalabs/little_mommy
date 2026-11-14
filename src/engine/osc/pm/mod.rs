@@ -1,18 +1,9 @@
 use super::operator::{OperatorVoice, OperatorWave};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PmState {
     pub carrier: OperatorVoice,
     pub modulator: OperatorVoice,
-}
-
-impl Default for PmState {
-    fn default() -> Self {
-        Self {
-            carrier: OperatorVoice::default(),
-            modulator: OperatorVoice::default(),
-        }
-    }
 }
 
 impl PmState {
@@ -57,4 +48,3 @@ impl PmState {
         );
     }
 }
-

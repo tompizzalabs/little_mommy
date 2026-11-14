@@ -11,6 +11,7 @@ pub enum NodeKind {
     Noise,
     Fm,
     Pm,
+    Vector,
     Mix,
     Filter,
     Env,
@@ -111,6 +112,33 @@ const FM_DEFS: &[ParamDef] = &[
     },
 ];
 const PM_DEFS: &[ParamDef] = &FM_DEFS;
+const VECTOR_DEFS: &[ParamDef] = &[
+    ParamDef {
+        name: "X",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Y",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Semi",
+        min: -24.0,
+        max: 24.0,
+    },
+    ParamDef {
+        name: "Detune",
+        min: -100.0,
+        max: 100.0,
+    },
+    ParamDef {
+        name: "Drift",
+        min: 0.0,
+        max: 1.0,
+    },
+];
 const FILTER_DEFS: &[ParamDef] = &[
     ParamDef {
         name: "Cut",
@@ -209,6 +237,13 @@ pub enum NodeParams {
         modulator_ratio: u8,
         drift: f32,
     },
+    Vector {
+        semitones: f32,
+        detune: f32,
+        x: f32,
+        y: f32,
+        drift: f32,
+    },
     Mix,
     Filter {
         cutoff: f32,
@@ -283,6 +318,13 @@ impl NodeParams {
                 modulator_ratio: 2,
                 drift: 0.0,
             },
+            NodeKind::Vector => NodeParams::Vector {
+                semitones: 0.0,
+                detune: 0.0,
+                x: 0.5,
+                y: 0.5,
+                drift: 0.0,
+            },
             NodeKind::Mix => NodeParams::Mix,
             NodeKind::Filter => NodeParams::Filter {
                 cutoff: 8000.0,
@@ -310,6 +352,7 @@ impl NodeParams {
             NodeParams::Noise { .. } => NodeKind::Noise,
             NodeParams::Fm { .. } => NodeKind::Fm,
             NodeParams::Pm { .. } => NodeKind::Pm,
+            NodeParams::Vector { .. } => NodeKind::Vector,
             NodeParams::Mix => NodeKind::Mix,
             NodeParams::Filter { .. } => NodeKind::Filter,
             NodeParams::Env { .. } => NodeKind::Env,
@@ -325,6 +368,7 @@ impl NodeParams {
             | NodeParams::Noise { .. }
             | NodeParams::Fm { .. }
             | NodeParams::Pm { .. }
+            | NodeParams::Vector { .. }
             | NodeParams::Lfo { .. } => 0,
             NodeParams::Mix => 2,
             NodeParams::Filter { .. }
@@ -340,6 +384,7 @@ impl NodeParams {
             NodeKind::Noise => "NOISE",
             NodeKind::Fm => "FM",
             NodeKind::Pm => "PM",
+            NodeKind::Vector => "VECTOR",
             NodeKind::Mix => "MIX",
             NodeKind::Filter => "FILTER",
             NodeKind::Env => "ENV",
@@ -355,6 +400,7 @@ impl NodeParams {
             NodeParams::Noise { .. } => NOISE_DEFS,
             NodeParams::Fm { .. } => FM_DEFS,
             NodeParams::Pm { .. } => PM_DEFS,
+            NodeParams::Vector { .. } => VECTOR_DEFS,
             NodeParams::Mix => EMPTY_DEFS,
             NodeParams::Filter { .. } => FILTER_DEFS,
             NodeParams::Env { .. } => ENV_DEFS,
@@ -398,6 +444,11 @@ impl NodeParams {
             (NodeParams::Pm { detune, .. }, 1) => *detune,
             (NodeParams::Pm { amount, .. }, 2) => *amount,
             (NodeParams::Pm { drift, .. }, 3) => *drift,
+            (NodeParams::Vector { x, .. }, 0) => *x,
+            (NodeParams::Vector { y, .. }, 1) => *y,
+            (NodeParams::Vector { semitones, .. }, 2) => *semitones,
+            (NodeParams::Vector { detune, .. }, 3) => *detune,
+            (NodeParams::Vector { drift, .. }, 4) => *drift,
             (NodeParams::Filter { cutoff, .. }, 0) => *cutoff,
             (NodeParams::Filter { resonance, .. }, 1) => *resonance,
             (NodeParams::Env { attack, .. }, 0) => *attack,
@@ -445,6 +496,11 @@ impl NodeParams {
             (NodeParams::Pm { detune, .. }, 1) => *detune = v,
             (NodeParams::Pm { amount, .. }, 2) => *amount = v,
             (NodeParams::Pm { drift, .. }, 3) => *drift = v,
+            (NodeParams::Vector { x, .. }, 0) => *x = v,
+            (NodeParams::Vector { y, .. }, 1) => *y = v,
+            (NodeParams::Vector { semitones, .. }, 2) => *semitones = v,
+            (NodeParams::Vector { detune, .. }, 3) => *detune = v,
+            (NodeParams::Vector { drift, .. }, 4) => *drift = v,
             (NodeParams::Filter { cutoff, .. }, 0) => *cutoff = v,
             (NodeParams::Filter { resonance, .. }, 1) => *resonance = v,
             (NodeParams::Env { attack, .. }, 0) => *attack = v,

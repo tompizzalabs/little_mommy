@@ -2,7 +2,7 @@ use crate::engine::{
     lfo::{LfoShape, LfoState},
     osc::{
         AnalogShape, AnalogVoiceState, FmState, MAX_UNISON_VOICES, NoiseColor, OperatorWave,
-        PmState, noise, unison,
+        PmState, VectorState, noise, unison,
     },
     osc::unison::{MAX_DETUNE_CENTS, UnisonConfig},
 };
@@ -31,6 +31,7 @@ pub struct NodeState {
     pub lfo: LfoState,
     pub fm: FmState,
     pub pm: PmState,
+    pub vector: VectorState,
 }
 
 impl Default for NodeState {
@@ -48,6 +49,7 @@ impl Default for NodeState {
             lfo: LfoState::default(),
             fm: FmState::default(),
             pm: PmState::default(),
+            vector: VectorState::default(),
         }
     }
 }
@@ -239,6 +241,21 @@ impl NodeState {
             modulator_ratio,
             drift,
         );
+        (mono, mono)
+    }
+
+    /// Vector oscillator: X/Y morph between four fixed bandlimited corner
+    /// waves. Mono (duplicated).
+    #[allow(clippy::too_many_arguments)]
+    pub fn vector(
+        &mut self,
+        freq: f32,
+        sample_rate: f32,
+        x: f32,
+        y: f32,
+        drift: f32,
+    ) -> (f32, f32) {
+        let mono = self.vector.next(freq, sample_rate, x, y, drift);
         (mono, mono)
     }
 }

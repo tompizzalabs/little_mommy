@@ -2,11 +2,12 @@
 
 use crate::engine::node::{NodeKind, NodeParams};
 
-pub const KIND_LIST: [NodeKind; 10] = [
+pub const KIND_LIST: [NodeKind; 11] = [
     NodeKind::Analog,
     NodeKind::Noise,
     NodeKind::Fm,
     NodeKind::Pm,
+    NodeKind::Vector,
     NodeKind::Mix,
     NodeKind::Filter,
     NodeKind::Env,
@@ -22,6 +23,7 @@ pub fn kind_color(params: Option<&NodeParams>) -> egui::Color32 {
         Some(NodeKind::Noise) => egui::Color32::from_rgb(110, 110, 118),
         Some(NodeKind::Fm) => egui::Color32::from_rgb(180, 100, 130),
         Some(NodeKind::Pm) => egui::Color32::from_rgb(160, 110, 190),
+        Some(NodeKind::Vector) => egui::Color32::from_rgb(110, 120, 200),
         Some(NodeKind::Mix) => egui::Color32::from_rgb(80, 140, 95),
         Some(NodeKind::Filter) => egui::Color32::from_rgb(190, 130, 60),
         Some(NodeKind::Env) => egui::Color32::from_rgb(140, 80, 150),
@@ -39,6 +41,7 @@ pub fn kind_label(kind: Option<NodeKind>) -> String {
             NodeKind::Noise => "NOISE",
             NodeKind::Fm => "FM",
             NodeKind::Pm => "PM",
+            NodeKind::Vector => "VECTOR",
             NodeKind::Mix => "MIX",
             NodeKind::Filter => "FILTER",
             NodeKind::Env => "ENV",

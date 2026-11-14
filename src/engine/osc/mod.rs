@@ -6,6 +6,7 @@ pub mod noise;
 pub mod operator;
 pub mod pm;
 pub mod unison;
+pub mod vector;
 
 pub use analog::{AnalogShape, AnalogVoiceState};
 pub use drift::{DRIFT_RANGE_SEMITONES, DriftGenerator};
@@ -17,3 +18,4 @@ pub use unison::{
     DetuneMode, MAX_DETUNE_CENTS, MAX_UNISON_VOICES, PanMode, StackMode, UnisonConfig,
     UnisonEngine, UnisonFrame,
 };
+pub use vector::VectorState;

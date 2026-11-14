@@ -248,6 +248,50 @@ fn fm_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
+fn vector_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+    vec![
+        (
+            0,
+            NodeParams::Vector {
+                semitones: 0.0,
+                detune: 0.0,
+                x: 0.35,
+                y: 0.4,
+                drift: 0.3,
+            },
+            InputSel::None,
+            InputSel::None,
+        ),
+        (
+            1,
+            NodeParams::Filter {
+                cutoff: 3500.0,
+                resonance: 0.2,
+            },
+            InputSel::Slot(0),
+            InputSel::None,
+        ),
+        (
+            2,
+            NodeParams::Env {
+                attack: 60.0,
+                decay: 400.0,
+                sustain: 0.7,
+                release: 500.0,
+            },
+            InputSel::Slot(1),
+            InputSel::None,
+        ),
+        (
+            3,
+            NodeParams::Gain { gain: 0.55 },
+            InputSel::Slot(2),
+            InputSel::None,
+        ),
+        (4, NodeParams::Out, InputSel::Slot(3), InputSel::None),
+    ]
+}
+
 pub fn factory_presets() -> Vec<Preset> {
     vec![
         Preset {
@@ -273,6 +317,11 @@ pub fn factory_presets() -> Vec<Preset> {
         Preset {
             name: "FM Bells",
             cells: fm_cells(),
+            play_mode: PlayMode::Poly,
+        },
+        Preset {
+            name: "Vector",
+            cells: vector_cells(),
             play_mode: PlayMode::Poly,
         },
     ]
