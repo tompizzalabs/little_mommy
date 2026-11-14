@@ -48,7 +48,8 @@ cargo nice-plug bundle little_mommy --release
 
 This synth was not made from absolute scratch
 Most parts of the synthesis engine were yoinked from [Odin2](https://github.com/TheWaveWarden/odin2) ( GPL Licensed ! )
-And the it's algorithms were consistently referenced,  
+
+And it's algorithms were consistently referenced,  
 Odin is a banger synth, although i absolutely hate it's UI
 
 Sadly this synth seems to be abandoned, as of November 2026 last commit on Odin2 was in October 2025, so Odin2 devs, we take it from where you left off, your work evolves and is not being forgotten
