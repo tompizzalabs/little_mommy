@@ -1,5 +1,3 @@
-//! Reusable widgets and label/color formatting helpers.
-
 use crate::engine::node::{NodeKind, NodeParams};
 
 pub const KIND_LIST: [NodeKind; 11] = [
@@ -17,7 +15,7 @@ pub const KIND_LIST: [NodeKind; 11] = [
 ];
 
 pub fn kind_color(params: Option<&NodeParams>) -> egui::Color32 {
-    match params.map(|p| p.kind()) {
+    match params.map(|params| params.kind()) {
         None => egui::Color32::from_rgb(70, 70, 78),
         Some(NodeKind::Analog) => egui::Color32::from_rgb(70, 110, 170),
         Some(NodeKind::Noise) => egui::Color32::from_rgb(110, 110, 118),

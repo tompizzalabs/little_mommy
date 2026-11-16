@@ -7,9 +7,6 @@ use std::sync::{Arc, Mutex};
 pub struct LittleMommyParams {
     #[id = "master_gain"]
     pub master_gain: FloatParam,
-    /// The full modular patch (nodes, cables, mod routings, play mode).
-    /// Persisted with the plugin state so DAW session reload restores it.
-    /// The audio engine and the editor share this same `Arc`.
     #[persist = "patch"]
     pub patch: Arc<Mutex<Patch>>,
 }

@@ -7,7 +7,7 @@ const CELL_MIN: f32 = 38.0;
 const CELL_H: f32 = 30.0;
 const GAP: f32 = 4.0;
 const SAMPLES: usize = 33;
-const EDGE_FRAC: f32 = 0.42;
+const EDGE_JUMP_FRACTION: f32 = 0.42;
 
 pub trait WaveShape: Copy + PartialEq {
     fn sample_at(self, t: f32) -> f32;
@@ -39,29 +39,29 @@ pub fn wave_shape_picker<S: WaveShape>(
     section_label(ui, "SHAPE");
 
     let width = ui.available_width().max(CELL_MIN);
-    let n = all.len();
-    let per_row = (((width + GAP) / (CELL_MIN + GAP)).floor() as usize).clamp(1, n);
-    let rows = n.div_ceil(per_row);
-    let cell_w = (width - GAP * (per_row - 1) as f32) / per_row as f32;
-    let height = rows as f32 * CELL_H + (rows - 1) as f32 * GAP;
+    let shape_count = all.len();
+    let per_row = (((width + GAP) / (CELL_MIN + GAP)).floor() as usize).clamp(1, shape_count);
+    let row_count = shape_count.div_ceil(per_row);
+    let cell_width = (width - GAP * (per_row - 1) as f32) / per_row as f32;
+    let height = row_count as f32 * CELL_H + (row_count - 1) as f32 * GAP;
 
     let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
     let base = ui.scope_id().with(id);
     let painter = ui.painter().clone();
     let mut changed = false;
 
-    for (i, &shape) in all.iter().enumerate() {
-        let col = i % per_row;
-        let row = i / per_row;
+    for (shape_index, &shape) in all.iter().enumerate() {
+        let column = shape_index % per_row;
+        let row = shape_index / per_row;
         let cell = Rect::from_min_size(
             pos2(
-                rect.left() + col as f32 * (cell_w + GAP),
+                rect.left() + column as f32 * (cell_width + GAP),
                 rect.top() + row as f32 * (CELL_H + GAP),
             ),
-            vec2(cell_w, CELL_H),
+            vec2(cell_width, CELL_H),
         );
 
-        let resp = ui.interact(cell, base.with(i), Sense::click());
+        let resp = ui.interact(cell, base.with(shape_index), Sense::click());
         if resp.clicked() && *value != shape {
             *value = shape;
             changed = true;
@@ -69,7 +69,7 @@ pub fn wave_shape_picker<S: WaveShape>(
 
         let active = *value == shape;
         let hot = resp.hovered();
-        let bg = if active {
+        let background = if active {
             th::alpha(accent, 42)
         } else if hot {
             th::WIDGET_HOT
@@ -84,7 +84,7 @@ pub fn wave_shape_picker<S: WaveShape>(
             th::INSET_EDGE
         };
 
-        painter.rect_filled(cell, 4.0, bg);
+        painter.rect_filled(cell, 4.0, background);
         painter.rect_stroke(
             cell,
             4.0,
@@ -93,33 +93,33 @@ pub fn wave_shape_picker<S: WaveShape>(
         );
 
         let plot = cell.shrink2(vec2(5.0, 6.0));
-        let mid = plot.center().y;
-        let half = plot.height() * 0.5;
+        let midline = plot.center().y;
+        let half_height = plot.height() * 0.5;
         painter.line_segment(
-            [pos2(plot.left(), mid), pos2(plot.right(), mid)],
+            [pos2(plot.left(), midline), pos2(plot.right(), midline)],
             Stroke::new(
                 1.0,
                 th::alpha(th::GRID_MAJOR, if active { 210 } else { 130 }),
             ),
         );
 
-        let mut pts = [Pos2::ZERO; SAMPLES * 2];
-        let mut len = 0usize;
-        let mut prev_y = mid;
-        for k in 0..SAMPLES {
-            let t = k as f32 / (SAMPLES - 1) as f32;
-            let x = plot.left() + plot.width() * t;
-            let y = mid - shape.sample_at(t).clamp(-1.0, 1.0) * half;
-            if k > 0 && (y - prev_y).abs() > plot.height() * EDGE_FRAC {
-                pts[len] = pos2(x, prev_y);
-                len += 1;
+        let mut points = [Pos2::ZERO; SAMPLES * 2];
+        let mut point_count = 0usize;
+        let mut previous_y = midline;
+        for sample_index in 0..SAMPLES {
+            let normalized_time = sample_index as f32 / (SAMPLES - 1) as f32;
+            let x = plot.left() + plot.width() * normalized_time;
+            let y = midline - shape.sample_at(normalized_time).clamp(-1.0, 1.0) * half_height;
+            if sample_index > 0 && (y - previous_y).abs() > plot.height() * EDGE_JUMP_FRACTION {
+                points[point_count] = pos2(x, previous_y);
+                point_count += 1;
             }
-            pts[len] = pos2(x, y);
-            len += 1;
-            prev_y = y;
+            points[point_count] = pos2(x, y);
+            point_count += 1;
+            previous_y = y;
         }
 
-        let line = &pts[..len];
+        let line = &points[..point_count];
         let color = if active {
             accent
         } else if hot {
@@ -142,7 +142,7 @@ pub fn wave_shape_picker<S: WaveShape>(
             painter.rect_filled(
                 Rect::from_min_size(
                     pos2(cell.left() + 6.0, cell.bottom() - 3.0),
-                    vec2(cell_w - 12.0, 2.0),
+                    vec2(cell_width - 12.0, 2.0),
                 ),
                 1.0,
                 accent,

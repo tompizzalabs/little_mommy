@@ -12,13 +12,13 @@ impl NoiseColor {
 }
 
 impl std::fmt::Display for NoiseColor {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = match self {
             NoiseColor::White => "White",
             NoiseColor::Pink => "Pink",
             NoiseColor::Brown => "Brown",
         };
-        write!(f, "{}", name)
+        write!(formatter, "{}", name)
     }
 }
 
@@ -40,7 +40,6 @@ impl Default for NoiseState {
 }
 
 impl NoiseState {
-    /// Deterministically re-seed the generator (per-voice, per-node).
     pub fn seed(&mut self, seed: u32) {
         self.rng = Rng::with_seed(seed as u64);
     }
@@ -58,22 +57,30 @@ impl NoiseState {
     }
 
     fn pink(&mut self) -> f32 {
-        let w = self.white();
-        let b = &mut self.pink;
-        b[0] = 0.99886 * b[0] + w * 0.0555179;
-        b[1] = 0.99332 * b[1] + w * 0.0750759;
-        b[2] = 0.96900 * b[2] + w * 0.153_852;
-        b[3] = 0.86715 * b[3] + w * 0.3104856;
-        b[4] = 0.55000 * b[4] + w * 0.5329522;
-        b[5] = -0.7616 * b[5] - w * 0.0168980;
-        let out = (b[0] + b[1] + b[2] + b[3] + b[4] + b[5] + b[6] + w * 0.5362) * 0.11;
-        b[6] = w * 0.115926;
-        out
+        let white_sample = self.white();
+        let bands = &mut self.pink;
+        bands[0] = 0.99886 * bands[0] + white_sample * 0.0555179;
+        bands[1] = 0.99332 * bands[1] + white_sample * 0.0750759;
+        bands[2] = 0.96900 * bands[2] + white_sample * 0.153_852;
+        bands[3] = 0.86715 * bands[3] + white_sample * 0.3104856;
+        bands[4] = 0.55000 * bands[4] + white_sample * 0.5329522;
+        bands[5] = -0.7616 * bands[5] - white_sample * 0.0168980;
+        let output = (bands[0]
+            + bands[1]
+            + bands[2]
+            + bands[3]
+            + bands[4]
+            + bands[5]
+            + bands[6]
+            + white_sample * 0.5362)
+            * 0.11;
+        bands[6] = white_sample * 0.115926;
+        output
     }
 
     fn brown(&mut self) -> f32 {
-        let w = self.white();
-        self.brown = (self.brown + 0.02 * w) / 1.02;
+        let white_sample = self.white();
+        self.brown = (self.brown + 0.02 * white_sample) / 1.02;
         self.brown * 3.5
     }
 }

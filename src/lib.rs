@@ -53,7 +53,7 @@ impl Default for LittleMommy {
 
 impl LittleMommy {
     fn note_on(&mut self, note: u8, velocity: f32) {
-        self.held_notes.retain(|n| *n != note);
+        self.held_notes.retain(|held| *held != note);
         self.held_notes.push(note);
 
         match self.play_mode {
@@ -87,7 +87,7 @@ impl LittleMommy {
     }
 
     fn note_off(&mut self, note: u8) {
-        if let Some(index) = self.held_notes.iter().rposition(|n| *n == note) {
+        if let Some(index) = self.held_notes.iter().rposition(|held| *held == note) {
             self.held_notes.remove(index);
         }
         match self.play_mode {
@@ -114,8 +114,8 @@ impl LittleMommy {
     fn active_mono_voice(&mut self) -> Option<&mut Voice> {
         self.voices
             .iter_mut()
-            .filter_map(|v| v.as_mut())
-            .find(|v| !v.stealing && !v.releasing)
+            .filter_map(|slot| slot.as_mut())
+            .find(|voice| !voice.stealing && !voice.releasing)
     }
 
     fn spawn_voice(&mut self, note: u8, velocity: f32) {
@@ -137,19 +137,19 @@ impl LittleMommy {
         let internal_voice_id = self.next_internal_voice_id;
         self.next_internal_voice_id = internal_voice_id.wrapping_add(1);
         let new_voice = Voice::new(internal_voice_id, note, velocity, self.compiled.nodes.len());
-        if let Some(free_idx) = self.voices.iter().position(|v| v.is_none()) {
-            self.voices[free_idx] = Some(new_voice);
+        if let Some(free_slot) = self.voices.iter().position(|slot| slot.is_none()) {
+            self.voices[free_slot] = Some(new_voice);
             return;
         }
-        let oldest_idx = self
+        let oldest_slot = self
             .voices
             .iter()
             .enumerate()
-            .filter_map(|(idx, v)| v.as_ref().map(|v| (idx, v.internal_voice_id)))
+            .filter_map(|(slot, voice)| voice.as_ref().map(|voice| (slot, voice.internal_voice_id)))
             .min_by_key(|(_, id)| *id)
-            .map(|(idx, _)| idx)
+            .map(|(slot, _)| slot)
             .unwrap_or(0);
-        self.voices[oldest_idx] = Some(new_voice);
+        self.voices[oldest_slot] = Some(new_voice);
     }
 
     fn release_note(&mut self, note: u8) {
@@ -163,15 +163,15 @@ impl LittleMommy {
     }
 
     fn choke_note(&mut self, note: u8) {
-        self.held_notes.retain(|n| *n != note);
+        self.held_notes.retain(|held| *held != note);
         match self.play_mode {
             PlayMode::Poly => {
                 for slot in self.voices.iter_mut() {
-                    let matches = slot
+                    let matches_note = slot
                         .as_ref()
-                        .map(|v| v.note_number == note)
+                        .map(|voice| voice.note_number == note)
                         .unwrap_or(false);
-                    if matches {
+                    if matches_note {
                         *slot = None;
                     }
                 }
@@ -183,9 +183,9 @@ impl LittleMommy {
                     }
                 } else {
                     let top = *self.held_notes.last().unwrap();
-                    let sounding_choked = self.voices.iter().any(|v| {
-                        v.as_ref()
-                            .map(|v| !v.stealing && v.note_number == note)
+                    let sounding_choked = self.voices.iter().any(|slot| {
+                        slot.as_ref()
+                            .map(|voice| !voice.stealing && voice.note_number == note)
                             .unwrap_or(false)
                     });
                     if sounding_choked && let Some(voice) = self.active_mono_voice() {
@@ -198,8 +198,11 @@ impl LittleMommy {
 
     fn terminate_finished_voices(&mut self) {
         for slot in self.voices.iter_mut() {
-            let done = slot.as_ref().map(|v| v.is_finished()).unwrap_or(false);
-            if done {
+            let finished = slot
+                .as_ref()
+                .map(|voice| voice.is_finished())
+                .unwrap_or(false);
+            if finished {
                 *slot = None;
             }
         }
@@ -301,23 +304,23 @@ impl Plugin for LittleMommy {
             }
 
             let master_gain = self.params.master_gain.smoothed.next();
-            let mut left = 0.0;
-            let mut right = 0.0;
-            for voice in self.voices.iter_mut().filter_map(|v| v.as_mut()) {
-                let (l, r) = voice.render(&self.compiled, sample_rate);
-                left += l;
-                right += r;
+            let mut mixed_left = 0.0;
+            let mut mixed_right = 0.0;
+            for slot in self.voices.iter_mut().filter_map(|slot| slot.as_mut()) {
+                let (voice_left, voice_right) = slot.render(&self.compiled, sample_rate);
+                mixed_left += voice_left;
+                mixed_right += voice_right;
             }
-            let out_l = (left * master_gain).clamp(-1.0, 1.0);
-            let out_r = (right * master_gain).clamp(-1.0, 1.0);
+            let output_left = (mixed_left * master_gain).clamp(-1.0, 1.0);
+            let output_right = (mixed_right * master_gain).clamp(-1.0, 1.0);
             let mut channels = channel_samples.into_iter();
             match (channels.next(), channels.next()) {
-                (Some(l), Some(r)) => {
-                    *l = out_l;
-                    *r = out_r;
+                (Some(left), Some(right)) => {
+                    *left = output_left;
+                    *right = output_right;
                 }
-                (Some(l), None) => {
-                    *l = (out_l + out_r) * 0.5;
+                (Some(left), None) => {
+                    *left = (output_left + output_right) * 0.5;
                 }
                 _ => {}
             }

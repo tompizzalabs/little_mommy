@@ -55,16 +55,16 @@ struct PaletteEntry {
 }
 
 fn palette_entries() -> &'static [PaletteEntry] {
-    static E: OnceLock<Vec<PaletteEntry>> = OnceLock::new();
-    E.get_or_init(|| {
+    static ENTRIES: OnceLock<Vec<PaletteEntry>> = OnceLock::new();
+    ENTRIES.get_or_init(|| {
         KIND_LIST
             .iter()
             .map(|&kind| {
-                let p = NodeParams::default_for(kind);
+                let default_params = NodeParams::default_for(kind);
                 PaletteEntry {
                     kind,
-                    accent: th::accent_for(Some(&p)),
-                    glyph: th::glyph_for(Some(&p)),
+                    accent: th::accent_for(Some(&default_params)),
+                    glyph: th::glyph_for(Some(&default_params)),
                     label: kind_label(Some(kind)).to_string(),
                 }
             })
@@ -80,10 +80,11 @@ fn add_node(
     kind: NodeKind,
     at: Pos2,
 ) {
-    // First empty slot is reused; otherwise the grid grows by one cell.
-    let slot = patch
-        .grid
-        .insert(NodeParams::default_for(kind), InputSel::None, InputSel::None);
+    let slot = patch.grid.insert(
+        NodeParams::default_for(kind),
+        InputSel::None,
+        InputSel::None,
+    );
     if positions.len() <= slot {
         positions.resize(slot + 1, Pos2::ZERO);
     }
@@ -108,16 +109,14 @@ pub fn canvas(
     context_menu_pos: &mut Option<Pos2>,
     context_menu_world: &mut Option<Pos2>,
 ) {
-    // The grid is unbounded: keep the editor scratch buffers in sync with the
-    // cell count before touching them below.
     ensure_scratch(patch, positions, geom);
-    let n_cells = patch.grid.cells.len();
+    let cell_count = patch.grid.cells.len();
 
     let kinds: Vec<Option<NodeKind>> = patch
         .grid
         .cells
         .iter()
-        .map(|c| c.params.as_ref().map(|p| p.kind()))
+        .map(|cell| cell.params.as_ref().map(|params| params.kind()))
         .collect();
 
     ui.painter()
@@ -137,31 +136,32 @@ pub fn canvas(
             let clip = ui.clip_rect();
 
             let (hover_global, primary_pressed, primary_released, secondary_pressed, delete_key) =
-                ui.input(|i| {
+                ui.input(|input| {
                     (
-                        i.pointer.hover_pos(),
-                        i.pointer.primary_pressed(),
-                        i.pointer.primary_released(),
-                        i.pointer.secondary_pressed(),
-                        i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
+                        input.pointer.hover_pos(),
+                        input.pointer.primary_pressed(),
+                        input.pointer.primary_released(),
+                        input.pointer.secondary_pressed(),
+                        input.key_pressed(egui::Key::Delete)
+                            || input.key_pressed(egui::Key::Backspace),
                     )
                 });
-            let world_hover = hover_global.map(|p| to_scene * p);
-            let hover_inside = world_hover.is_some_and(|p| clip.contains(p));
+            let hover_position = hover_global.map(|position| to_scene * position);
+            let hover_inside = hover_position.is_some_and(|position| clip.contains(position));
 
             draw_grid(ui, zoom, clip);
-            if patch.grid.cells.iter().all(|c| c.params.is_none()) {
-                let c = clip.center();
-                let p = ui.painter();
-                p.text(
-                    c - vec2(0.0, 11.0 / zoom),
+            if patch.grid.cells.iter().all(|cell| cell.params.is_none()) {
+                let canvas_center = clip.center();
+                let painter = ui.painter();
+                painter.text(
+                    canvas_center - vec2(0.0, 11.0 / zoom),
                     egui::Align2::CENTER_CENTER,
                     "RIGHT-CLICK TO ADD A MODULE",
                     egui::FontId::proportional(13.0 / zoom),
                     th::TEXT_FAINT,
                 );
-                p.text(
-                    c + vec2(0.0, 11.0 / zoom),
+                painter.text(
+                    canvas_center + vec2(0.0, 11.0 / zoom),
                     egui::Align2::CENTER_CENTER,
                     "middle-drag to pan · wheel to zoom",
                     egui::FontId::proportional(10.0 / zoom),
@@ -174,14 +174,14 @@ pub fn canvas(
                 cell.in0 = InputSel::None;
                 cell.in1 = InputSel::None;
                 cell.mods.clear();
-                for cell in patch.grid.cells.iter_mut() {
-                    if cell.in0 == InputSel::Slot(slot as u32) {
-                        cell.in0 = InputSel::None;
+                for other_cell in patch.grid.cells.iter_mut() {
+                    if other_cell.in0 == InputSel::Slot(slot as u32) {
+                        other_cell.in0 = InputSel::None;
                     }
-                    if cell.in1 == InputSel::Slot(slot as u32) {
-                        cell.in1 = InputSel::None;
+                    if other_cell.in1 == InputSel::Slot(slot as u32) {
+                        other_cell.in1 = InputSel::None;
                     }
-                    cell.mods.retain(|l| l.source as usize != slot);
+                    other_cell.mods.retain(|link| link.source as usize != slot);
                 }
                 geom[slot].valid = false;
                 patch.version = patch.version.wrapping_add(1);
@@ -190,13 +190,13 @@ pub fn canvas(
 
             if secondary_pressed
                 && hover_inside
-                && let Some(p) = hover_global
+                && let Some(position) = hover_global
             {
-                *context_menu_pos = Some(p);
-                *context_menu_world = Some(to_scene * p);
+                *context_menu_pos = Some(position);
+                *context_menu_world = Some(to_scene * position);
             }
 
-            for slot in 0..n_cells {
+            for slot in 0..cell_count {
                 let cell = &mut patch.grid.cells[slot];
                 if cell.params.is_none() {
                     geom[slot].valid = false;
@@ -205,18 +205,18 @@ pub fn canvas(
 
                 let world_pos = positions[slot];
                 let cached = geom[slot];
-                let est = if cached.valid {
+                let estimated_rect = if cached.valid {
                     cached.translated(world_pos - cached.rect.min).rect
                 } else {
                     Rect::from_min_size(world_pos, vec2(NODE_W, 210.0))
                 };
 
-                if !est.expand2(CULL_PAD).intersects(clip) {
+                if !estimated_rect.expand2(CULL_PAD).intersects(clip) {
                     geom[slot] = if cached.valid {
                         cached.translated(world_pos - cached.rect.min)
                     } else {
                         NodeGeom {
-                            rect: est,
+                            rect: estimated_rect,
                             ..NodeGeom::default()
                         }
                     };
@@ -227,7 +227,7 @@ pub fn canvas(
                 let accent = th::accent_for(cell.params.as_ref());
                 let title = kind_label(kinds[slot]).to_string();
                 let mut dirty = false;
-                geom[slot].mod_in_n = 0;
+                geom[slot].mod_input_count = 0;
 
                 let card = ui
                     .scope_builder(
@@ -236,7 +236,7 @@ pub fn canvas(
                             .max_rect(Rect::from_min_size(world_pos, vec2(NODE_W, f32::INFINITY))),
                         |ui| {
                             ui.set_width(NODE_W);
-                            let bg = ui.painter().add(Shape::Noop);
+                            let background_shape = ui.painter().add(Shape::Noop);
                             let header =
                                 ui.allocate_response(vec2(NODE_W, HEADER_H), Sense::drag());
                             if header.dragged() {
@@ -253,13 +253,13 @@ pub fn canvas(
                                     ui.vertical(|ui| {
                                         ui.set_width(BODY_W);
                                         ui.spacing_mut().item_spacing = vec2(5.0, 5.0);
-                                        if let Some(np) = cell.params.as_mut() {
-                                            kind_controls(ui, np, accent, slot, &mut dirty);
+                                        if let Some(params) = cell.params.as_mut() {
+                                            kind_controls(ui, params, accent, slot, &mut dirty);
                                         }
                                         let defs: &'static [ParamDef] = cell
                                             .params
                                             .as_ref()
-                                            .map(|p| p.param_defs())
+                                            .map(|params| params.param_defs())
                                             .unwrap_or(&[]);
                                         if !defs.is_empty() {
                                             ui.add_space(2.0);
@@ -278,23 +278,23 @@ pub fn canvas(
                                 pos2(world_pos.x + NODE_W, body.bottom() + 9.0),
                             );
                             ui.painter().set(
-                                bg,
+                                background_shape,
                                 Shape::Vec(th::card(card, accent, is_selected, header.hovered())),
                             );
 
-                            let hp = ui.painter();
+                            let header_painter = ui.painter();
 
-                            let badge_l =
+                            let badge_left =
                                 Rect::from_min_size(card.min + vec2(8.0, 7.0), vec2(15.0, 14.0));
                             th::badge(
-                                &hp,
-                                badge_l,
+                                header_painter,
+                                badge_left,
                                 th::alpha(accent, 60),
                                 &title.chars().next().unwrap_or('N').to_string(),
                                 accent,
                             );
 
-                            hp.text(
+                            header_painter.text(
                                 pos2(card.center().x, card.top() + HEADER_H * 0.5),
                                 egui::Align2::CENTER_CENTER,
                                 &title,
@@ -302,11 +302,16 @@ pub fn canvas(
                                 accent,
                             );
 
-                            let badge_r = Rect::from_min_size(
+                            let badge_right = Rect::from_min_size(
                                 pos2(card.right() - 23.0, card.top() + 7.0),
                                 vec2(15.0, 14.0),
                             );
-                            th::badge_arrow(&hp, badge_r, th::alpha(th::CV, 52), th::CV);
+                            th::badge_arrow(
+                                header_painter,
+                                badge_right,
+                                th::alpha(th::CV, 52),
+                                th::CV,
+                            );
 
                             ui.advance_cursor_after_rect(card);
                             card
@@ -314,9 +319,9 @@ pub fn canvas(
                     )
                     .inner;
 
-                let g = &mut geom[slot];
-                g.rect = card;
-                g.valid = true;
+                let geometry = &mut geom[slot];
+                geometry.rect = card;
+                geometry.valid = true;
                 if dirty {
                     patch.version = patch.version.wrapping_add(1);
                 }
@@ -327,28 +332,31 @@ pub fn canvas(
             let mut hovered_port: Option<(usize, usize, bool)> = None;
             let mut hovered_node: Option<usize> = None;
 
-            if let Some(h) = world_hover {
-                'mods: for slot in 0..n_cells {
-                    let g = geom[slot];
-                    if !g.valid {
+            if let Some(hover_position) = hover_position {
+                'mods: for (slot, geometry) in geom.iter().enumerate().take(cell_count) {
+                    if !geometry.valid {
                         continue;
                     }
-                    for param in 0..g.mod_in_n {
-                        if g.mod_in[param].distance_sq(h) < HIT_MOD_SQ {
+                    for (param, mod_input_position) in geometry.mod_inputs
+                        [..geometry.mod_input_count]
+                        .iter()
+                        .enumerate()
+                    {
+                        if mod_input_position.distance_sq(hover_position) < HIT_MOD_SQ {
                             hovered_mod_in = Some((slot, param));
                             break 'mods;
                         }
                     }
-                    if g.mod_out().distance_sq(h) < HIT_MOD_SQ {
+                    if geometry.mod_out().distance_sq(hover_position) < HIT_MOD_SQ {
                         hovered_mod_out = Some(slot);
                         break 'mods;
                     }
                 }
 
                 if hovered_mod_in.is_none() && hovered_mod_out.is_none() {
-                    'ports: for slot in 0..n_cells {
-                        let g = geom[slot];
-                        if !g.valid || patch.grid.cells[slot].params.is_none() {
+                    'ports: for slot in 0..cell_count {
+                        let geometry = geom[slot];
+                        if !geometry.valid || patch.grid.cells[slot].params.is_none() {
                             continue;
                         }
                         let inputs = patch.grid.cells[slot]
@@ -356,20 +364,20 @@ pub fn canvas(
                             .as_ref()
                             .unwrap()
                             .input_count();
-                        for i in 0..inputs {
-                            if g.audio_in(i).distance_sq(h) < HIT_PORT_SQ {
-                                hovered_port = Some((slot, i, true));
+                        for port in 0..inputs {
+                            if geometry.audio_in(port).distance_sq(hover_position) < HIT_PORT_SQ {
+                                hovered_port = Some((slot, port, true));
                                 break 'ports;
                             }
                         }
-                        if g.audio_out().distance_sq(h) < HIT_PORT_SQ {
+                        if geometry.audio_out().distance_sq(hover_position) < HIT_PORT_SQ {
                             hovered_port = Some((slot, 0, false));
                             break 'ports;
                         }
                     }
                     if hovered_port.is_none() {
-                        for slot in (0..n_cells).rev() {
-                            if geom[slot].valid && geom[slot].rect.contains(h) {
+                        for slot in (0..cell_count).rev() {
+                            if geom[slot].valid && geom[slot].rect.contains(hover_position) {
                                 hovered_node = Some(slot);
                                 break;
                             }
@@ -381,9 +389,9 @@ pub fn canvas(
             if primary_pressed {
                 if let Some((slot, param)) = hovered_mod_in {
                     let mods = &mut patch.grid.cells[slot].mods;
-                    let before = mods.len();
-                    mods.retain(|l| l.param as usize != param);
-                    if mods.len() != before {
+                    let link_count_before = mods.len();
+                    mods.retain(|link| link.param as usize != param);
+                    if mods.len() != link_count_before {
                         patch.version = patch.version.wrapping_add(1);
                     }
                 } else if let Some(slot) = hovered_mod_out {
@@ -433,7 +441,7 @@ pub fn canvas(
                             && slot != from
                         {
                             let mods = &mut patch.grid.cells[slot].mods;
-                            mods.retain(|l| l.param as usize != param);
+                            mods.retain(|link| link.param as usize != param);
                             mods.push(ModLink {
                                 source: from as u32,
                                 param: param as u8,
@@ -449,8 +457,8 @@ pub fn canvas(
 
             match drag {
                 DragState::Cable { current, .. } | DragState::ModCable { current, .. } => {
-                    if let Some(h) = world_hover {
-                        *current = h;
+                    if let Some(position) = hover_position {
+                        *current = position;
                     }
                 }
                 DragState::None => {}
@@ -463,16 +471,16 @@ pub fn canvas(
                     continue;
                 }
                 let inputs = cell.params.as_ref().unwrap().input_count();
-                for (port, sel) in [(0usize, cell.in0), (1usize, cell.in1)] {
+                for (port, selection) in [(0usize, cell.in0), (1usize, cell.in1)] {
                     if port >= inputs {
                         continue;
                     }
-                    if let Some(src) = patch.grid.resolve(slot, sel) {
-                        let src = src as usize;
-                        if !geom[src].valid {
+                    if let Some(source) = patch.grid.resolve(slot, selection) {
+                        let source = source as usize;
+                        if !geom[source].valid {
                             continue;
                         }
-                        let from = geom[src].audio_out();
+                        let from = geom[source].audio_out();
                         let to = geom[slot].audio_in(port);
                         if cable_visible(clip, from, to, 52.0) {
                             th::cable(
@@ -481,7 +489,7 @@ pub fn canvas(
                                 to,
                                 52.0,
                                 2.2,
-                                th::accent_for(patch.grid.cells[src].params.as_ref()),
+                                th::accent_for(patch.grid.cells[source].params.as_ref()),
                             );
                         }
                     }
@@ -493,13 +501,13 @@ pub fn canvas(
                     continue;
                 }
                 for link in cell.mods.iter() {
-                    let src = link.source as usize;
+                    let source = link.source as usize;
                     let param = link.param as usize;
-                    if !geom[src].valid || param >= geom[slot].mod_in_n {
+                    if !geom[source].valid || param >= geom[slot].mod_input_count {
                         continue;
                     }
-                    let from = geom[src].mod_out();
-                    let to = geom[slot].mod_in[param];
+                    let from = geom[source].mod_out();
+                    let to = geom[slot].mod_inputs[param];
                     if cable_visible(clip, from, to, 38.0) {
                         th::cable(&painter, from, to, 38.0, 1.8, th::MOD);
                     }
@@ -523,48 +531,50 @@ pub fn canvas(
                 _ => {}
             }
 
-            for slot in 0..n_cells {
-                let g = geom[slot];
-                if !g.valid || patch.grid.cells[slot].params.is_none() {
+            for slot in 0..cell_count {
+                let geometry = geom[slot];
+                if !geometry.valid || patch.grid.cells[slot].params.is_none() {
                     continue;
                 }
-                if !g.rect.expand(16.0).intersects(clip) {
+                if !geometry.rect.expand(16.0).intersects(clip) {
                     continue;
                 }
                 let cell = &patch.grid.cells[slot];
                 let inputs = cell.params.as_ref().unwrap().input_count();
                 let accent = th::accent_for(cell.params.as_ref());
-                for i in 0..inputs {
-                    let hot = hovered_port == Some((slot, i, true));
+                for port in 0..inputs {
+                    let hot = hovered_port == Some((slot, port, true));
                     th::port(
                         &painter,
-                        g.audio_in(i),
-                        if i == 0 { th::AUDIO } else { th::GATE },
+                        geometry.audio_in(port),
+                        if port == 0 { th::AUDIO } else { th::GATE },
                         hot,
                         false,
                     );
                 }
                 th::port(
                     &painter,
-                    g.audio_out(),
+                    geometry.audio_out(),
                     accent,
                     hovered_port == Some((slot, 0, false)),
                     true,
                 );
                 th::port(
                     &painter,
-                    g.mod_out(),
+                    geometry.mod_out(),
                     th::CV,
                     hovered_mod_out == Some(slot),
                     true,
                 );
             }
 
-            if let Some(h) = world_hover {
-                let tip = if let Some((slot, param)) = hovered_mod_in {
-                    Some(format!("Mod in · param {} · click to unlink", param + 1))
-                        .map(|s| (s, th::MOD))
-                        .map(|(s, c)| (s, c, slot))
+            if let Some(hover_position) = hover_position {
+                let tooltip = if let Some((slot, param)) = hovered_mod_in {
+                    Some((
+                        format!("Mod in · param {} · click to unlink", param + 1),
+                        th::MOD,
+                        slot,
+                    ))
                 } else if let Some(slot) = hovered_mod_out {
                     Some((format!("Mod out · S{}", slot), th::CV, slot))
                 } else if let Some((slot, port, is_input)) = hovered_port {
@@ -584,19 +594,24 @@ pub fn canvas(
                 } else {
                     None
                 };
-                if let Some((text, color, _)) = tip {
+                if let Some((text, color, _)) = tooltip {
                     let font = egui::FontId::proportional(10.0);
                     let galley = painter.layout_no_wrap(text, font, th::TEXT_BRIGHT);
                     let size = galley.size() + vec2(14.0, 8.0);
-                    let r = Rect::from_min_size(h + vec2(14.0, -size.y - 8.0), size);
-                    painter.rect_filled(r, 4.0, Color32::from_rgba_unmultiplied(14, 14, 17, 235));
+                    let panel =
+                        Rect::from_min_size(hover_position + vec2(14.0, -size.y - 8.0), size);
+                    painter.rect_filled(
+                        panel,
+                        4.0,
+                        Color32::from_rgba_unmultiplied(14, 14, 17, 235),
+                    );
                     painter.rect_stroke(
-                        r,
+                        panel,
                         4.0,
                         Stroke::new(1.0, th::alpha(color, 150)),
                         egui::StrokeKind::Inside,
                     );
-                    painter.galley(r.min + vec2(7.0, 4.0), galley, th::TEXT_BRIGHT);
+                    painter.galley(panel.min + vec2(7.0, 4.0), galley, th::TEXT_BRIGHT);
                 }
             }
         });
@@ -621,24 +636,24 @@ pub fn canvas(
                                 .color(th::TEXT_FAINT),
                         );
                         ui.add_space(3.0);
-                        for e in palette_entries() {
+                        for entry in palette_entries() {
                             let (rect, resp) =
                                 ui.allocate_exact_size(vec2(150.0, 22.0), Sense::click());
-                            let p = ui.painter();
+                            let painter = ui.painter();
                             if resp.hovered() {
-                                p.rect_filled(rect, 4.0, th::alpha(e.accent, 34));
+                                painter.rect_filled(rect, 4.0, th::alpha(entry.accent, 34));
                             }
                             th::draw_glyph(
-                                &p,
+                                painter,
                                 Rect::from_min_size(rect.min + vec2(4.0, 4.0), vec2(20.0, 14.0)),
-                                e.glyph,
-                                e.accent,
+                                entry.glyph,
+                                entry.accent,
                                 1.3,
                             );
-                            p.text(
+                            painter.text(
                                 pos2(rect.left() + 30.0, rect.center().y),
                                 egui::Align2::LEFT_CENTER,
-                                &e.label,
+                                &entry.label,
                                 egui::FontId::proportional(11.0),
                                 if resp.hovered() {
                                     th::TEXT_BRIGHT
@@ -647,23 +662,23 @@ pub fn canvas(
                                 },
                             );
                             if resp.clicked() {
-                                add_node(patch, positions, geom, selected, e.kind, world_pos);
+                                add_node(patch, positions, geom, selected, entry.kind, world_pos);
                                 close_menu = true;
                             }
                         }
                     });
             });
-        if close_menu || ui.input(|i| i.pointer.primary_clicked()) {
+        if close_menu || ui.input(|input| input.pointer.primary_clicked()) {
             *context_menu_pos = None;
             *context_menu_world = None;
         }
     }
 }
 fn center_detented(name: &str) -> bool {
-    let n = name.to_ascii_lowercase();
+    let lowercase_name = name.to_ascii_lowercase();
     ["pan", "balance", "skew", "bias", "detune", "blend"]
         .iter()
-        .any(|k| n.contains(k))
+        .any(|keyword| lowercase_name.contains(keyword))
 }
 #[allow(clippy::too_many_arguments)]
 fn param_grid(
@@ -678,33 +693,43 @@ fn param_grid(
     for chunk in defs.chunks(4) {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-            for (k, def) in chunk.iter().enumerate() {
-                let i = defs.iter().position(|d| std::ptr::eq(d, def)).unwrap_or(k);
-                let link_idx = cell.mods.iter().position(|l| l.param as usize == i);
-                let mut v = cell.params.as_ref().map(|p| p.param_get(i)).unwrap_or(0.0);
-                let depth = link_idx.map(|li| &mut cell.mods[li].depth);
-                let mid = (def.min + def.max) * 0.5;
-                let out = Knob::new(&mut v, def.min, def.max)
+            for (chunk_index, definition) in chunk.iter().enumerate() {
+                let param_index = defs
+                    .iter()
+                    .position(|candidate| std::ptr::eq(candidate, definition))
+                    .unwrap_or(chunk_index);
+                let link_index = cell
+                    .mods
+                    .iter()
+                    .position(|link| link.param as usize == param_index);
+                let mut value = cell
+                    .params
+                    .as_ref()
+                    .map(|params| params.param_get(param_index))
+                    .unwrap_or(0.0);
+                let depth = link_index.map(|index| &mut cell.mods[index].depth);
+                let default_value = (definition.min + definition.max) * 0.5;
+                let output = Knob::new(&mut value, definition.min, definition.max)
                     .accent(accent)
-                    .label(def.name)
-                    .default(mid)
-                    .bipolar(center_detented(def.name))
+                    .label(definition.name)
+                    .default(default_value)
+                    .bipolar(center_detented(definition.name))
                     .depth(depth)
                     .ui(ui);
-                let g = &mut geom[slot];
-                if g.mod_in_n < MAX_MOD_PARAMS {
-                    g.mod_in[g.mod_in_n] = out.mod_pos;
-                    g.mod_in_n += 1;
+                let geometry = &mut geom[slot];
+                if geometry.mod_input_count < MAX_MOD_PARAMS {
+                    geometry.mod_inputs[geometry.mod_input_count] = output.mod_pos;
+                    geometry.mod_input_count += 1;
                 }
-                if out.response.changed() {
-                    if let Some(np) = cell.params.as_mut() {
-                        np.param_set(i, v);
+                if output.response.changed() {
+                    if let Some(params) = cell.params.as_mut() {
+                        params.param_set(param_index, value);
                     }
                     *dirty = true;
                 }
-                out.response.on_hover_text(format!(
+                output.response.on_hover_text(format!(
                     "{} · drag to adjust · shift = fine · double-click = reset",
-                    def.name
+                    definition.name
                 ));
             }
         });
@@ -713,12 +738,12 @@ fn param_grid(
 
 fn kind_controls(
     ui: &mut egui::Ui,
-    np: &mut NodeParams,
+    params: &mut NodeParams,
     accent: Color32,
     slot: usize,
     dirty: &mut bool,
 ) {
-    match np {
+    match params {
         NodeParams::Analog {
             shape,
             pulse_width,
@@ -766,15 +791,27 @@ fn kind_controls(
             );
         }
         NodeParams::Noise { color, .. } => {
-            let mut idx = NoiseColor::ALL.iter().position(|c| c == color).unwrap_or(0);
+            let mut selected_index = NoiseColor::ALL
+                .iter()
+                .position(|candidate| candidate == color)
+                .unwrap_or(0);
             let options: Vec<(usize, String)> = NoiseColor::ALL
                 .iter()
                 .enumerate()
-                .map(|(i, c)| (i, c.to_string()))
+                .map(|(index, candidate)| (index, candidate.to_string()))
                 .collect();
-            let refs: Vec<(usize, &str)> = options.iter().map(|(i, s)| (*i, s.as_str())).collect();
-            if knob::segmented(ui, "noise_color", &mut idx, &refs, accent) {
-                *color = NoiseColor::ALL[idx];
+            let option_labels: Vec<(usize, &str)> = options
+                .iter()
+                .map(|(index, label)| (*index, label.as_str()))
+                .collect();
+            if knob::segmented(
+                ui,
+                "noise_color",
+                &mut selected_index,
+                &option_labels,
+                accent,
+            ) {
+                *color = NoiseColor::ALL[selected_index];
                 *dirty = true;
             }
             preview::preview_noise(ui, BODY_W, accent, *color, slot as u32);
@@ -889,26 +926,26 @@ fn kind_controls(
                 ui.add_space(8.0);
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing = vec2(2.0, 4.0);
-                    let mut xv = *x;
-                    let mut yv = *y;
-                    let ox = Knob::new(&mut xv, 0.0, 1.0)
+                    let mut x_value = *x;
+                    let mut y_value = *y;
+                    let x_knob = Knob::new(&mut x_value, 0.0, 1.0)
                         .accent(accent)
                         .size(28.0)
                         .label("X")
                         .default(0.5)
                         .ui(ui);
-                    let oy = Knob::new(&mut yv, 0.0, 1.0)
+                    let y_knob = Knob::new(&mut y_value, 0.0, 1.0)
                         .accent(accent)
                         .size(28.0)
                         .label("Y")
                         .default(0.5)
                         .ui(ui);
-                    if ox.response.changed() {
-                        *x = xv;
+                    if x_knob.response.changed() {
+                        *x = x_value;
                         *dirty = true;
                     }
-                    if oy.response.changed() {
-                        *y = yv;
+                    if y_knob.response.changed() {
+                        *y = y_value;
                         *dirty = true;
                     }
                 });
@@ -932,27 +969,27 @@ fn draw_grid(ui: &egui::Ui, zoom: f32, rect: Rect) {
     while step * zoom < GRID_MIN_PX {
         step *= 2.0;
     }
-    let x0 = rect.min.x - rect.min.x.rem_euclid(step);
-    let y0 = rect.min.y - rect.min.y.rem_euclid(step);
-    let nx = (((rect.max.x - x0) / step) as i32 + 1).clamp(0, GRID_MAX_AXIS);
-    let ny = (((rect.max.y - y0) / step) as i32 + 1).clamp(0, GRID_MAX_AXIS);
+    let grid_start_x = rect.min.x - rect.min.x.rem_euclid(step);
+    let grid_start_y = rect.min.y - rect.min.y.rem_euclid(step);
+    let column_count = (((rect.max.x - grid_start_x) / step) as i32 + 1).clamp(0, GRID_MAX_AXIS);
+    let row_count = (((rect.max.y - grid_start_y) / step) as i32 + 1).clamp(0, GRID_MAX_AXIS);
     let painter = ui.painter();
-    let xr = rect.x_range();
-    let yr = rect.y_range();
-    for ix in 0..nx {
-        let x = x0 + ix as f32 * step;
+    let x_range = rect.x_range();
+    let y_range = rect.y_range();
+    for column in 0..column_count {
+        let x = grid_start_x + column as f32 * step;
         let major = (x / step).round() as i64 % 4 == 0;
         painter.vline(
             x,
-            yr,
+            y_range,
             Stroke::new(1.0, if major { th::GRID_MAJOR } else { th::GRID_LINE }),
         );
     }
-    for iy in 0..ny {
-        let y = y0 + iy as f32 * step;
+    for row in 0..row_count {
+        let y = grid_start_y + row as f32 * step;
         let major = (y / step).round() as i64 % 4 == 0;
         painter.hline(
-            xr,
+            x_range,
             y,
             Stroke::new(1.0, if major { th::GRID_MAJOR } else { th::GRID_LINE }),
         );
@@ -960,8 +997,8 @@ fn draw_grid(ui: &egui::Ui, zoom: f32, rect: Rect) {
 }
 
 #[inline(always)]
-fn cable_visible(clip: Rect, a: Pos2, b: Pos2, handle: f32) -> bool {
-    let min = a.min(b) - vec2(handle, 0.0);
-    let max = a.max(b) + vec2(handle, 0.0);
+fn cable_visible(clip: Rect, start: Pos2, end: Pos2, handle: f32) -> bool {
+    let min = start.min(end) - vec2(handle, 0.0);
+    let max = start.max(end) + vec2(handle, 0.0);
     clip.intersects(Rect::from_min_max(min, max))
 }

@@ -48,53 +48,53 @@ fn install_fonts(ctx: &egui::Context) {
 
 fn apply_theme(ctx: &egui::Context) {
     let mut style = (*ctx.style_of(egui::Theme::Dark)).clone();
-    let v = &mut style.visuals;
-    *v = egui::Theme::Dark.default_visuals();
-    v.override_text_color = Some(theme::TEXT_BRIGHT);
-    v.panel_fill = theme::CANVAS_BG;
-    v.window_fill = theme::SURFACE_HI;
-    v.window_stroke = egui::Stroke::new(1.0, theme::NODE_EDGE);
-    v.window_corner_radius = 8.into();
-    v.menu_corner_radius = 8.into();
-    v.extreme_bg_color = theme::INSET_BG;
-    v.faint_bg_color = theme::SURFACE;
-    v.code_bg_color = theme::INSET_BG;
-    v.hyperlink_color = theme::CV;
-    v.selection.bg_fill = theme::alpha(theme::CV, 70);
-    v.selection.stroke = egui::Stroke::new(1.0, theme::CV);
-    v.warn_fg_color = theme::WARN;
-    v.error_fg_color = theme::AUDIO;
+    let visuals = &mut style.visuals;
+    *visuals = egui::Theme::Dark.default_visuals();
+    visuals.override_text_color = Some(theme::TEXT_BRIGHT);
+    visuals.panel_fill = theme::CANVAS_BG;
+    visuals.window_fill = theme::SURFACE_HI;
+    visuals.window_stroke = egui::Stroke::new(1.0, theme::NODE_EDGE);
+    visuals.window_corner_radius = 8.into();
+    visuals.menu_corner_radius = 8.into();
+    visuals.extreme_bg_color = theme::INSET_BG;
+    visuals.faint_bg_color = theme::SURFACE;
+    visuals.code_bg_color = theme::INSET_BG;
+    visuals.hyperlink_color = theme::CV;
+    visuals.selection.bg_fill = theme::alpha(theme::CV, 70);
+    visuals.selection.stroke = egui::Stroke::new(1.0, theme::CV);
+    visuals.warn_fg_color = theme::WARN;
+    visuals.error_fg_color = theme::AUDIO;
 
-    let w = &mut v.widgets;
+    let widgets = &mut visuals.widgets;
 
-    w.noninteractive.bg_fill = theme::SURFACE;
-    w.noninteractive.weak_bg_fill = theme::SURFACE;
-    w.noninteractive.bg_stroke = egui::Stroke::new(1.0, theme::INSET_EDGE);
-    w.noninteractive.fg_stroke = egui::Stroke::new(1.0, theme::TEXT_DIM);
-    w.noninteractive.corner_radius = 4.into();
+    widgets.noninteractive.bg_fill = theme::SURFACE;
+    widgets.noninteractive.weak_bg_fill = theme::SURFACE;
+    widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0, theme::INSET_EDGE);
+    widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, theme::TEXT_DIM);
+    widgets.noninteractive.corner_radius = 4.into();
 
-    w.inactive.bg_fill = theme::WIDGET;
-    w.inactive.weak_bg_fill = theme::WIDGET;
-    w.inactive.bg_stroke = egui::Stroke::new(1.0, theme::INSET_EDGE);
-    w.inactive.fg_stroke = egui::Stroke::new(1.0, theme::TEXT_DIM);
-    w.inactive.corner_radius = 5.into();
+    widgets.inactive.bg_fill = theme::WIDGET;
+    widgets.inactive.weak_bg_fill = theme::WIDGET;
+    widgets.inactive.bg_stroke = egui::Stroke::new(1.0, theme::INSET_EDGE);
+    widgets.inactive.fg_stroke = egui::Stroke::new(1.0, theme::TEXT_DIM);
+    widgets.inactive.corner_radius = 5.into();
 
-    w.hovered.bg_fill = theme::WIDGET_HOT;
-    w.hovered.weak_bg_fill = theme::WIDGET_HOT;
-    w.hovered.bg_stroke = egui::Stroke::new(1.0, theme::CV);
-    w.hovered.fg_stroke = egui::Stroke::new(1.4, theme::TEXT_BRIGHT);
-    w.hovered.corner_radius = 5.into();
+    widgets.hovered.bg_fill = theme::WIDGET_HOT;
+    widgets.hovered.weak_bg_fill = theme::WIDGET_HOT;
+    widgets.hovered.bg_stroke = egui::Stroke::new(1.0, theme::CV);
+    widgets.hovered.fg_stroke = egui::Stroke::new(1.4, theme::TEXT_BRIGHT);
+    widgets.hovered.corner_radius = 5.into();
 
-    w.active.bg_fill = theme::WIDGET_ON;
-    w.active.weak_bg_fill = theme::WIDGET_ON;
-    w.active.bg_stroke = egui::Stroke::new(1.0, theme::CV);
-    w.active.fg_stroke = egui::Stroke::new(1.4, theme::TEXT_BRIGHT);
-    w.active.corner_radius = 5.into();
+    widgets.active.bg_fill = theme::WIDGET_ON;
+    widgets.active.weak_bg_fill = theme::WIDGET_ON;
+    widgets.active.bg_stroke = egui::Stroke::new(1.0, theme::CV);
+    widgets.active.fg_stroke = egui::Stroke::new(1.4, theme::TEXT_BRIGHT);
+    widgets.active.corner_radius = 5.into();
 
-    w.open.bg_fill = theme::SURFACE_HI;
-    w.open.weak_bg_fill = theme::SURFACE_HI;
-    w.open.bg_stroke = egui::Stroke::new(1.0, theme::NODE_EDGE);
-    w.open.fg_stroke = egui::Stroke::new(1.0, theme::TEXT_BRIGHT);
+    widgets.open.bg_fill = theme::SURFACE_HI;
+    widgets.open.weak_bg_fill = theme::SURFACE_HI;
+    widgets.open.bg_stroke = egui::Stroke::new(1.0, theme::NODE_EDGE);
+    widgets.open.fg_stroke = egui::Stroke::new(1.0, theme::TEXT_BRIGHT);
 
     style.spacing.item_spacing = egui::vec2(6.0, 6.0);
     style.spacing.button_padding = egui::vec2(9.0, 5.0);
@@ -176,11 +176,9 @@ impl NiceEguiApp for LittleMommyEditor {
             return;
         };
         let params = &self.params;
-        let grew = self.positions.len() < patch.grid.cells.len();
+        let scratch_grew = self.positions.len() < patch.grid.cells.len();
         ensure_scratch(&patch, &mut self.positions, &mut self.geom);
-        if grew {
-            // The patch was replaced (state restore / preset load from the
-            // host): position the (new) nodes instead of leaving them at ZERO.
+        if scratch_grew {
             state::auto_layout(&patch, &mut self.positions);
         }
 

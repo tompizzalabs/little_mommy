@@ -67,14 +67,14 @@ impl LfoShape {
         }
     }
 
-    pub fn sample(&self, p: f32) -> f32 {
+    pub fn sample(&self, phase: f32) -> f32 {
         let length = LFO_TABLE_LENGTH as f32;
-        let pp = p.rem_euclid(1.0) * length;
+        let table_position = phase.rem_euclid(1.0) * length;
         if *self == LfoShape::SampleHold {
-            let step = (p.rem_euclid(1.0) * 8.0) as u32;
+            let step = (phase.rem_euclid(1.0) * 8.0) as u32;
             return (step.wrapping_mul(0x9E37_79B9) as f32 / u32::MAX as f32) * 2.0 - 1.0;
         }
-        sample_table(*self, pp)
+        sample_table(*self, table_position)
     }
 }
 
@@ -106,7 +106,7 @@ impl std::fmt::Display for LfoShape {
 #[derive(Debug, Clone)]
 pub struct LfoState {
     pub read_index: f32,
-    pub sh_value: f32,
+    pub sample_hold_value: f32,
     pub rng: Rng,
 }
 
@@ -114,7 +114,7 @@ impl Default for LfoState {
     fn default() -> Self {
         Self {
             read_index: 0.0,
-            sh_value: 0.0,
+            sample_hold_value: 0.0,
             rng: Rng::with_seed(0x9E37_79B9),
         }
     }
@@ -127,27 +127,25 @@ impl LfoState {
         }
 
         let length = LFO_TABLE_LENGTH as f32;
-        let inc = length * rate.max(0.0) / sample_rate;
+        let increment = length * rate.max(0.0) / sample_rate;
 
         if shape == LfoShape::SampleHold {
-            // Odin `doSampleHold()`: advance the reader, then pull a fresh S&H value
-            // on *every* boundary crossed. A large increment can wrap several times.
-            self.read_index += inc;
+            self.read_index += increment;
             while self.read_index < 0.0 {
                 self.read_index += length;
-                self.sh_value = self.rng.f32() * 2.0 - 1.0;
+                self.sample_hold_value = self.rng.f32() * 2.0 - 1.0;
             }
             while self.read_index >= length {
                 self.read_index -= length;
-                self.sh_value = self.rng.f32() * 2.0 - 1.0;
+                self.sample_hold_value = self.rng.f32() * 2.0 - 1.0;
             }
-            return self.sh_value;
+            return self.sample_hold_value;
         }
 
-        let p = (self.read_index + phase_offset.clamp(0.0, 1.0) * length).rem_euclid(length);
-        let out = sample_table(shape, p);
+        let position = (self.read_index + phase_offset.clamp(0.0, 1.0) * length).rem_euclid(length);
+        let output = sample_table(shape, position);
 
-        self.read_index += inc;
+        self.read_index += increment;
         while self.read_index < 0.0 {
             self.read_index += length;
         }
@@ -155,34 +153,34 @@ impl LfoState {
             self.read_index -= length;
         }
 
-        out
+        output
     }
 }
 
-fn sample_table(shape: LfoShape, p: f32) -> f32 {
+fn sample_table(shape: LfoShape, position: f32) -> f32 {
     let length = LFO_TABLE_LENGTH as f32;
-    let i0 = p as usize;
+    let first_index = position as usize;
 
-    let i1 = if i0 + 1 >= LFO_TABLE_LENGTH {
+    let next_index = if first_index + 1 >= LFO_TABLE_LENGTH {
         0
     } else {
-        i0 + 1
+        first_index + 1
     };
-    let frac = p - i0 as f32;
+    let fraction = position - first_index as f32;
 
     match shape {
-        LfoShape::Sine => (p / length * TAU).sin(),
-        LfoShape::Saw => p / length * 2.0 - 1.0,
+        LfoShape::Sine => (position / length * TAU).sin(),
+        LfoShape::Saw => position / length * 2.0 - 1.0,
         LfoShape::Triangle => {
-            if p < length * 0.5 {
-                4.0 * (p / length) - 1.0
+            if position < length * 0.5 {
+                4.0 * (position / length) - 1.0
             } else {
-                3.0 - 4.0 * (p / length)
+                3.0 - 4.0 * (position / length)
             }
         }
         _ => {
             let table = &LFO_TABLES[shape.table_index().unwrap_or(0)];
-            table[i0] + (table[i1] - table[i0]) * frac
+            table[first_index] + (table[next_index] - table[first_index]) * fraction
         }
     }
 }

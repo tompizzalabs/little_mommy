@@ -47,15 +47,20 @@ pub const ARC_SEG: usize = 30;
 const DISC_SEG: usize = 28;
 
 #[inline(always)]
-pub fn alpha(c: Color32, a: u8) -> Color32 {
-    Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), a)
+pub fn alpha(color: Color32, opacity: u8) -> Color32 {
+    Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), opacity)
 }
 
 #[inline(always)]
-pub fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
-    let t = t.clamp(0.0, 1.0);
-    let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
-    Color32::from_rgb(l(a.r(), b.r()), l(a.g(), b.g()), l(a.b(), b.b()))
+pub fn mix(from: Color32, to: Color32, amount: f32) -> Color32 {
+    let amount = amount.clamp(0.0, 1.0);
+    let blend_channel =
+        |start: u8, end: u8| (start as f32 + (end as f32 - start as f32) * amount).round() as u8;
+    Color32::from_rgb(
+        blend_channel(from.r(), to.r()),
+        blend_channel(from.g(), to.g()),
+        blend_channel(from.b(), to.b()),
+    )
 }
 
 pub fn accent_for(params: Option<&NodeParams>) -> Color32 {
@@ -69,56 +74,56 @@ pub fn accent_for(params: Option<&NodeParams>) -> Color32 {
 }
 
 fn arc_units() -> &'static [Vec2; ARC_SEG + 1] {
-    static U: OnceLock<[Vec2; ARC_SEG + 1]> = OnceLock::new();
-    U.get_or_init(|| {
-        std::array::from_fn(|i| {
-            let a = (-135.0 + 270.0 * i as f32 / ARC_SEG as f32) * DEG;
-            vec2(a.sin(), -a.cos())
+    static UNITS: OnceLock<[Vec2; ARC_SEG + 1]> = OnceLock::new();
+    UNITS.get_or_init(|| {
+        std::array::from_fn(|index| {
+            let angle = (-135.0 + 270.0 * index as f32 / ARC_SEG as f32) * DEG;
+            vec2(angle.sin(), -angle.cos())
         })
     })
 }
 
 fn disc_units() -> &'static [Vec2; DISC_SEG] {
-    static U: OnceLock<[Vec2; DISC_SEG]> = OnceLock::new();
-    U.get_or_init(|| {
-        std::array::from_fn(|i| {
-            let a = std::f32::consts::TAU * i as f32 / DISC_SEG as f32;
-            vec2(a.cos(), a.sin())
+    static UNITS: OnceLock<[Vec2; DISC_SEG]> = OnceLock::new();
+    UNITS.get_or_init(|| {
+        std::array::from_fn(|index| {
+            let angle = std::f32::consts::TAU * index as f32 / DISC_SEG as f32;
+            vec2(angle.cos(), angle.sin())
         })
     })
 }
 
 #[inline]
-pub fn knob_dir(t: f32) -> Vec2 {
-    let a = (-135.0 + 270.0 * t.clamp(0.0, 1.0)) * DEG;
-    vec2(a.sin(), -a.cos())
+pub fn knob_dir(normalized_position: f32) -> Vec2 {
+    let angle = (-135.0 + 270.0 * normalized_position.clamp(0.0, 1.0)) * DEG;
+    vec2(angle.sin(), -angle.cos())
 }
 
 #[inline]
-fn sample_unit(units: &[Vec2], x: f32) -> Vec2 {
-    let i = (x.floor() as usize).min(units.len() - 1);
-    let j = (i + 1).min(units.len() - 1);
-    let f = x - i as f32;
-    units[i] + (units[j] - units[i]) * f
+fn sample_unit(units: &[Vec2], position: f32) -> Vec2 {
+    let first_index = (position.floor() as usize).min(units.len() - 1);
+    let next_index = (first_index + 1).min(units.len() - 1);
+    let fraction = position - first_index as f32;
+    units[first_index] + (units[next_index] - units[first_index]) * fraction
 }
 
-pub fn arc(center: Pos2, r: f32, from: f32, to: f32, stroke: Stroke) -> Shape {
+pub fn arc(center: Pos2, radius: f32, from: f32, to: f32, stroke: Stroke) -> Shape {
     let (from, to) = if to >= from { (from, to) } else { (to, from) };
     if to - from < 1e-4 {
         return Shape::Noop;
     }
     let units = arc_units();
-    let a = from.clamp(0.0, 1.0) * ARC_SEG as f32;
-    let b = to.clamp(0.0, 1.0) * ARC_SEG as f32;
-    let i0 = a.floor() as usize;
-    let i1 = b.floor() as usize;
-    let mut pts = Vec::with_capacity(i1 - i0 + 3);
-    pts.push(center + sample_unit(units, a) * r);
-    for i in (i0 + 1)..=i1 {
-        pts.push(center + units[i] * r);
+    let start_position = from.clamp(0.0, 1.0) * ARC_SEG as f32;
+    let end_position = to.clamp(0.0, 1.0) * ARC_SEG as f32;
+    let first_index = start_position.floor() as usize;
+    let last_index = end_position.floor() as usize;
+    let mut points = Vec::with_capacity(last_index - first_index + 3);
+    points.push(center + sample_unit(units, start_position) * radius);
+    for unit in &units[first_index + 1..=last_index] {
+        points.push(center + *unit * radius);
     }
-    pts.push(center + sample_unit(units, b) * r);
-    Shape::line(pts, stroke)
+    points.push(center + sample_unit(units, end_position) * radius);
+    Shape::line(points, stroke)
 }
 
 fn fan_mesh(
@@ -126,63 +131,80 @@ fn fan_mesh(
     center: Pos2,
     top: Color32,
     bottom: Color32,
-    y0: f32,
-    y1: f32,
+    top_y: f32,
+    bottom_y: f32,
 ) -> Mesh {
     let uv = WHITE_UV;
-    let span = (y1 - y0).max(1e-3);
-    let col = |y: f32| mix(top, bottom, (y - y0) / span);
+    let vertical_span = (bottom_y - top_y).max(1e-3);
+    let color_at_height = |y: f32| mix(top, bottom, (y - top_y) / vertical_span);
     let mut mesh = Mesh::default();
     mesh.vertices.reserve(outline.len() + 1);
     mesh.indices.reserve(outline.len() * 3);
     mesh.vertices.push(Vertex {
         pos: center,
         uv,
-        color: col(center.y),
+        color: color_at_height(center.y),
     });
-    for &p in outline {
+    for &point in outline {
         mesh.vertices.push(Vertex {
-            pos: p,
+            pos: point,
             uv,
-            color: col(p.y),
+            color: color_at_height(point.y),
         });
     }
-    let n = outline.len() as u32;
-    for i in 0..n {
-        mesh.indices.extend_from_slice(&[0, i + 1, (i + 1) % n + 1]);
+    let outline_length = outline.len() as u32;
+    for index in 0..outline_length {
+        mesh.indices
+            .extend_from_slice(&[0, index + 1, (index + 1) % outline_length + 1]);
     }
     mesh
 }
 
-pub fn disc_gradient(center: Pos2, r: f32, top: Color32, bottom: Color32) -> Shape {
+pub fn disc_gradient(center: Pos2, radius: f32, top: Color32, bottom: Color32) -> Shape {
     let units = disc_units();
     let mut outline = [Pos2::ZERO; DISC_SEG];
-    for i in 0..DISC_SEG {
-        outline[i] = center + units[i] * r;
+    for (index, unit) in units.iter().enumerate() {
+        outline[index] = center + *unit * radius;
     }
     Shape::mesh(fan_mesh(
         &outline,
         center,
         top,
         bottom,
-        center.y - r,
-        center.y + r,
+        center.y - radius,
+        center.y + radius,
     ))
 }
 
 pub fn rounded_gradient(rect: Rect, radius: f32, top: Color32, bottom: Color32) -> Shape {
-    let r = radius.min(rect.width() * 0.5).min(rect.height() * 0.5);
+    let radius = radius.min(rect.width() * 0.5).min(rect.height() * 0.5);
     let corners = [
-        (pos2(rect.right() - r, rect.top() + r), -90.0f32, 0.0f32),
-        (pos2(rect.right() - r, rect.bottom() - r), 0.0, 90.0),
-        (pos2(rect.left() + r, rect.bottom() - r), 90.0, 180.0),
-        (pos2(rect.left() + r, rect.top() + r), 180.0, 270.0),
+        (
+            pos2(rect.right() - radius, rect.top() + radius),
+            -90.0f32,
+            0.0f32,
+        ),
+        (
+            pos2(rect.right() - radius, rect.bottom() - radius),
+            0.0,
+            90.0,
+        ),
+        (
+            pos2(rect.left() + radius, rect.bottom() - radius),
+            90.0,
+            180.0,
+        ),
+        (
+            pos2(rect.left() + radius, rect.top() + radius),
+            180.0,
+            270.0,
+        ),
     ];
     let mut outline = Vec::with_capacity(24);
-    for (c, a0, a1) in corners {
-        for i in 0..6 {
-            let a = (a0 + (a1 - a0) * i as f32 / 5.0) * DEG;
-            outline.push(c + vec2(a.cos(), a.sin()) * r);
+    for (corner_center, angle_start, angle_end) in corners {
+        for step in 0..6 {
+            let angle = (angle_start + (angle_end - angle_start) * step as f32 / 5.0) * DEG;
+            outline.push(corner_center + vec2(angle.cos(), angle.sin()) * radius);
         }
     }
     Shape::mesh(fan_mesh(
@@ -249,22 +271,28 @@ pub fn badge(painter: &egui::Painter, rect: Rect, fill: Color32, text: &str, tex
 }
 pub fn badge_arrow(painter: &egui::Painter, rect: Rect, fill: Color32, color: Color32) {
     painter.rect_filled(rect, 4.0, fill);
-    let c = rect.center();
-    let s = rect.width().min(rect.height()) * 0.30;
-    let tip = pos2(c.x + s, c.y);
+    let center = rect.center();
+    let size = rect.width().min(rect.height()) * 0.30;
+    let tip = pos2(center.x + size, center.y);
     let stroke = Stroke::new(1.4, color);
-    painter.line_segment([pos2(c.x - s, c.y), tip], stroke);
-    painter.line_segment([tip, pos2(tip.x - s * 0.62, tip.y - s * 0.62)], stroke);
-    painter.line_segment([tip, pos2(tip.x - s * 0.62, tip.y + s * 0.62)], stroke);
+    painter.line_segment([pos2(center.x - size, center.y), tip], stroke);
+    painter.line_segment(
+        [tip, pos2(tip.x - size * 0.62, tip.y - size * 0.62)],
+        stroke,
+    );
+    painter.line_segment(
+        [tip, pos2(tip.x - size * 0.62, tip.y + size * 0.62)],
+        stroke,
+    );
 }
-pub fn port(painter: &egui::Painter, pos: Pos2, color: Color32, hot: bool, output: bool) {
-    let r = if output { 5.0 } else { 4.5 };
+pub fn port(painter: &egui::Painter, position: Pos2, color: Color32, hot: bool, output: bool) {
+    let radius = if output { 5.0 } else { 4.5 };
     if hot {
-        painter.circle_filled(pos, r + 5.0, alpha(color, 44));
+        painter.circle_filled(position, radius + 5.0, alpha(color, 44));
     }
-    painter.circle_filled(pos, r + 1.0, Color32::from_black_alpha(150));
-    painter.circle_filled(pos, r, color);
-    painter.circle_filled(pos, r * 0.42, Color32::from_rgb(11, 11, 13));
+    painter.circle_filled(position, radius + 1.0, Color32::from_black_alpha(150));
+    painter.circle_filled(position, radius, color);
+    painter.circle_filled(position, radius * 0.42, Color32::from_rgb(11, 11, 13));
 }
 
 pub fn cable(
@@ -290,40 +318,63 @@ pub fn cable(
     ));
 }
 
-pub fn dashed(painter: &egui::Painter, a: Pos2, b: Pos2, dash: f32, gap: f32, stroke: Stroke) {
-    let d = b - a;
-    let len = d.length();
-    if len < 1e-3 {
+pub fn dashed(
+    painter: &egui::Painter,
+    start: Pos2,
+    end: Pos2,
+    dash: f32,
+    gap: f32,
+    stroke: Stroke,
+) {
+    let delta = end - start;
+    let distance = delta.length();
+    if distance < 1e-3 {
         return;
     }
-    let dir = d / len;
-    let mut t = 0.0;
-    while t < len {
-        let e = (t + dash).min(len);
-        painter.line_segment([a + dir * t, a + dir * e], stroke);
-        t = e + gap;
+    let direction = delta / distance;
+    let mut progress = 0.0;
+    while progress < distance {
+        let segment_end = (progress + dash).min(distance);
+        painter.line_segment(
+            [
+                start + direction * progress,
+                start + direction * segment_end,
+            ],
+            stroke,
+        );
+        progress = segment_end + gap;
     }
 }
 
-pub fn fill_under(pts: &[Pos2], baseline: f32, color: Color32) -> Shape {
-    if pts.len() < 2 {
+pub fn fill_under(points: &[Pos2], baseline: f32, color: Color32) -> Shape {
+    if points.len() < 2 {
         return Shape::Noop;
     }
     let uv = WHITE_UV;
     let mut mesh = Mesh::default();
-    mesh.vertices.reserve(pts.len() * 2);
-    mesh.indices.reserve((pts.len() - 1) * 6);
-    for (i, &p) in pts.iter().enumerate() {
-        mesh.vertices.push(Vertex { pos: p, uv, color });
+    mesh.vertices.reserve(points.len() * 2);
+    mesh.indices.reserve((points.len() - 1) * 6);
+    for (index, &point) in points.iter().enumerate() {
         mesh.vertices.push(Vertex {
-            pos: pos2(p.x, baseline),
+            pos: point,
+            uv,
+            color,
+        });
+        mesh.vertices.push(Vertex {
+            pos: pos2(point.x, baseline),
             uv,
             color: alpha(color, 4),
         });
-        if i > 0 {
-            let b = (i * 2) as u32;
-            mesh.indices
-                .extend_from_slice(&[b - 2, b - 1, b, b, b - 1, b + 1]);
+        if index > 0 {
+            let pair_index = (index * 2) as u32;
+            mesh.indices.extend_from_slice(&[
+                pair_index - 2,
+                pair_index - 1,
+                pair_index,
+                pair_index,
+                pair_index - 1,
+                pair_index + 1,
+            ]);
         }
     }
     Shape::mesh(mesh)
@@ -358,14 +409,19 @@ pub fn glyph_for(params: Option<&NodeParams>) -> Glyph {
 }
 
 pub fn draw_glyph(painter: &egui::Painter, rect: Rect, glyph: Glyph, color: Color32, width: f32) {
-    let r = rect.shrink2(vec2(rect.width() * 0.12, rect.height() * 0.22));
-    let p = |x: f32, y: f32| pos2(r.left() + r.width() * x, r.top() + r.height() * y);
+    let inner_rect = rect.shrink2(vec2(rect.width() * 0.12, rect.height() * 0.22));
+    let point_at = |normalized_x: f32, normalized_y: f32| {
+        pos2(
+            inner_rect.left() + inner_rect.width() * normalized_x,
+            inner_rect.top() + inner_rect.height() * normalized_y,
+        )
+    };
     let stroke = Stroke::new(width, color);
-    let wave = |f: &dyn Fn(f32) -> f32, n: usize| -> Vec<Pos2> {
-        (0..n)
-            .map(|i| {
-                let t = i as f32 / (n - 1) as f32;
-                p(t, 0.5 - f(t) * 0.5)
+    let wave = |curve: &dyn Fn(f32) -> f32, sample_count: usize| -> Vec<Pos2> {
+        (0..sample_count)
+            .map(|sample_index| {
+                let normalized_time = sample_index as f32 / (sample_count - 1) as f32;
+                point_at(normalized_time, 0.5 - curve(normalized_time) * 0.5)
             })
             .collect()
     };
@@ -376,46 +432,56 @@ pub fn draw_glyph(painter: &egui::Painter, rect: Rect, glyph: Glyph, color: Colo
             stroke,
         ),
         Glyph::Tri => Shape::line(
-            vec![p(0.0, 0.5), p(0.25, 0.0), p(0.75, 1.0), p(1.0, 0.5)],
+            vec![
+                point_at(0.0, 0.5),
+                point_at(0.25, 0.0),
+                point_at(0.75, 1.0),
+                point_at(1.0, 0.5),
+            ],
             stroke,
         ),
         Glyph::Saw => Shape::line(
-            vec![p(0.0, 1.0), p(0.5, 0.0), p(0.5, 1.0), p(1.0, 0.0)],
+            vec![
+                point_at(0.0, 1.0),
+                point_at(0.5, 0.0),
+                point_at(0.5, 1.0),
+                point_at(1.0, 0.0),
+            ],
             stroke,
         ),
         Glyph::Square => Shape::line(
             vec![
-                p(0.0, 1.0),
-                p(0.0, 0.0),
-                p(0.5, 0.0),
-                p(0.5, 1.0),
-                p(1.0, 1.0),
-                p(1.0, 0.0),
+                point_at(0.0, 1.0),
+                point_at(0.0, 0.0),
+                point_at(0.5, 0.0),
+                point_at(0.5, 1.0),
+                point_at(1.0, 1.0),
+                point_at(1.0, 0.0),
             ],
             stroke,
         ),
         Glyph::Noise => Shape::line(
             vec![
-                p(0.0, 0.7),
-                p(0.1, 0.2),
-                p(0.2, 0.85),
-                p(0.32, 0.35),
-                p(0.44, 0.95),
-                p(0.56, 0.15),
-                p(0.68, 0.6),
-                p(0.8, 0.25),
-                p(0.9, 0.8),
-                p(1.0, 0.45),
+                point_at(0.0, 0.7),
+                point_at(0.1, 0.2),
+                point_at(0.2, 0.85),
+                point_at(0.32, 0.35),
+                point_at(0.44, 0.95),
+                point_at(0.56, 0.15),
+                point_at(0.68, 0.6),
+                point_at(0.8, 0.25),
+                point_at(0.9, 0.8),
+                point_at(1.0, 0.45),
             ],
             stroke,
         ),
         Glyph::Env => Shape::line(
             vec![
-                p(0.0, 1.0),
-                p(0.22, 0.0),
-                p(0.45, 0.55),
-                p(0.75, 0.55),
-                p(1.0, 1.0),
+                point_at(0.0, 1.0),
+                point_at(0.22, 0.0),
+                point_at(0.45, 0.55),
+                point_at(0.75, 0.55),
+                point_at(1.0, 1.0),
             ],
             stroke,
         ),
@@ -435,24 +501,24 @@ pub fn draw_glyph(painter: &egui::Painter, rect: Rect, glyph: Glyph, color: Colo
         ),
         Glyph::Vector => Shape::Vec(vec![
             Shape::rect_stroke(
-                r,
+                inner_rect,
                 2.0,
                 Stroke::new(width, alpha(color, 120)),
                 egui::StrokeKind::Inside,
             ),
             Shape::line_segment(
-                [p(0.5, 0.0), p(0.5, 1.0)],
+                [point_at(0.5, 0.0), point_at(0.5, 1.0)],
                 Stroke::new(1.0, alpha(color, 70)),
             ),
             Shape::line_segment(
-                [p(0.0, 0.5), p(1.0, 0.5)],
+                [point_at(0.0, 0.5), point_at(1.0, 0.5)],
                 Stroke::new(1.0, alpha(color, 70)),
             ),
-            Shape::circle_filled(p(0.68, 0.32), 2.4, color),
+            Shape::circle_filled(point_at(0.68, 0.32), 2.4, color),
         ]),
         Glyph::Generic => Shape::Vec(vec![
-            Shape::circle_stroke(r.center(), r.height() * 0.42, stroke),
-            Shape::circle_filled(r.center(), 1.8, color),
+            Shape::circle_stroke(inner_rect.center(), inner_rect.height() * 0.42, stroke),
+            Shape::circle_filled(inner_rect.center(), 1.8, color),
         ]),
     };
     painter.add(shape);

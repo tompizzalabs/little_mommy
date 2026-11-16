@@ -62,22 +62,23 @@ impl<'a> Knob<'a> {
 
     pub fn ui(self, ui: &mut egui::Ui) -> KnobOut {
         let has_depth = self.depth.is_some();
-        let w = self.size + 14.0;
-        let h = self.size + 24.0 + if has_depth { 9.0 } else { 0.0 };
-        let (rect, mut resp) = ui.allocate_exact_size(vec2(w, h), Sense::click_and_drag());
+        let width = self.size + 14.0;
+        let height = self.size + 24.0 + if has_depth { 9.0 } else { 0.0 };
+        let (rect, mut resp) = ui.allocate_exact_size(vec2(width, height), Sense::click_and_drag());
         let span = (self.max - self.min).max(1e-9);
         let mut value = *self.value;
 
         if resp.dragged() {
-            let (delta, fine) = ui.input(|i| (i.pointer.delta(), i.modifiers.shift));
-            let speed = if fine { 0.16 } else { 1.0 };
-            let d = (-delta.y + delta.x) * speed / 190.0;
-            value = (value + d * span).clamp(self.min, self.max);
+            let (pointer_delta, fine_mode) =
+                ui.input(|input| (input.pointer.delta(), input.modifiers.shift));
+            let speed = if fine_mode { 0.16 } else { 1.0 };
+            let movement = (-pointer_delta.y + pointer_delta.x) * speed / 190.0;
+            value = (value + movement * span).clamp(self.min, self.max);
         }
-        if resp.double_clicked() {
-            if let Some(d) = self.default {
-                value = d.clamp(self.min, self.max);
-            }
+        if resp.double_clicked()
+            && let Some(default_value) = self.default
+        {
+            value = default_value.clamp(self.min, self.max);
         }
         let changed = (value - *self.value).abs() > f32::EPSILON;
         if changed {
@@ -85,20 +86,20 @@ impl<'a> Knob<'a> {
             resp.mark_changed();
         }
 
-        let t = ((value - self.min) / span).clamp(0.0, 1.0);
-        let r = self.size * 0.5;
-        let center = pos2(rect.left() + 12.0 + r, rect.top() + r);
+        let normalized = ((value - self.min) / span).clamp(0.0, 1.0);
+        let radius = self.size * 0.5;
+        let center = pos2(rect.left() + 12.0 + radius, rect.top() + radius);
         let linked = has_depth;
         let arc_color = if linked { th::MOD } else { self.accent };
         let painter = ui.painter();
 
         if resp.hovered() || resp.dragged() {
-            painter.circle_filled(center, r + 3.0, th::alpha(arc_color, 26));
+            painter.circle_filled(center, radius + 3.0, th::alpha(arc_color, 26));
         }
-        painter.circle_filled(center, r, th::KNOB_RING);
+        painter.circle_filled(center, radius, th::KNOB_RING);
         painter.add(th::arc(
             center,
-            r - 1.6,
+            radius - 1.6,
             0.0,
             1.0,
             Stroke::new(2.6, th::KNOB_TRACK),
@@ -106,39 +107,42 @@ impl<'a> Knob<'a> {
         if self.bipolar {
             painter.add(th::arc(
                 center,
-                r - 1.6,
+                radius - 1.6,
                 0.5,
-                t,
+                normalized,
                 Stroke::new(2.6, arc_color),
             ));
         } else {
             painter.add(th::arc(
                 center,
-                r - 1.6,
+                radius - 1.6,
                 0.0,
-                t,
+                normalized,
                 Stroke::new(2.6, arc_color),
             ));
         }
         painter.add(th::disc_gradient(
             center,
-            r * 0.74,
+            radius * 0.74,
             th::KNOB_TOP,
             th::KNOB_BOTTOM,
         ));
         painter.circle_stroke(
             center,
-            r * 0.74,
+            radius * 0.74,
             Stroke::new(1.0, Color32::from_black_alpha(110)),
         );
-        let dir = th::knob_dir(t);
+        let direction = th::knob_dir(normalized);
         painter.line_segment(
-            [center + dir * (r * 0.20), center + dir * (r * 0.66)],
+            [
+                center + direction * (radius * 0.20),
+                center + direction * (radius * 0.66),
+            ],
             Stroke::new(2.0, th::POINTER),
         );
 
         let text = match self.formatter {
-            Some(f) => f(value),
+            Some(formatter) => formatter(value),
             None => fmt_param(self.label, value, self.min, self.max),
         };
         painter.text(
@@ -167,37 +171,38 @@ impl<'a> Knob<'a> {
 
         if let Some(depth) = self.depth {
             let bar = Rect::from_min_size(
-                pos2(center.x - r, rect.top() + self.size + 25.0),
+                pos2(center.x - radius, rect.top() + self.size + 25.0),
                 vec2(self.size, 4.0),
             );
-            let dr = ui.interact(bar, resp.id.with("depth"), Sense::click_and_drag());
-            let mut d = *depth;
-            if dr.dragged() {
-                d = (d + ui.input(|i| i.pointer.delta().x) / 90.0).clamp(-1.0, 1.0);
+            let depth_response = ui.interact(bar, resp.id.with("depth"), Sense::click_and_drag());
+            let mut depth_value = *depth;
+            if depth_response.dragged() {
+                depth_value = (depth_value + ui.input(|input| input.pointer.delta().x) / 90.0)
+                    .clamp(-1.0, 1.0);
             }
-            if dr.double_clicked() {
-                d = 1.0;
+            if depth_response.double_clicked() {
+                depth_value = 1.0;
             }
-            if (d - *depth).abs() > f32::EPSILON {
-                *depth = d;
+            if (depth_value - *depth).abs() > f32::EPSILON {
+                *depth = depth_value;
                 resp.mark_changed();
             }
-            let p = ui.painter();
-            p.rect_filled(bar, 2.0, th::KNOB_TRACK);
-            let mid = bar.center().x;
-            let end = mid + bar.width() * 0.5 * *depth;
+            let painter = ui.painter();
+            painter.rect_filled(bar, 2.0, th::KNOB_TRACK);
+            let midpoint = bar.center().x;
+            let fill_end = midpoint + bar.width() * 0.5 * *depth;
             let fill = Rect::from_min_max(
-                pos2(mid.min(end), bar.top()),
-                pos2(mid.max(end), bar.bottom()),
+                pos2(midpoint.min(fill_end), bar.top()),
+                pos2(midpoint.max(fill_end), bar.bottom()),
             );
-            p.rect_filled(fill, 2.0, th::MOD);
-            p.rect_filled(
-                Rect::from_center_size(pos2(mid, bar.center().y), vec2(1.0, bar.height())),
+            painter.rect_filled(fill, 2.0, th::MOD);
+            painter.rect_filled(
+                Rect::from_center_size(pos2(midpoint, bar.center().y), vec2(1.0, bar.height())),
                 0.0,
                 th::TEXT_FAINT,
             );
-            if dr.hovered() {
-                p.rect_stroke(
+            if depth_response.hovered() {
+                painter.rect_stroke(
                     bar.expand(1.5),
                     3.0,
                     Stroke::new(1.0, th::alpha(th::MOD, 120)),
@@ -213,38 +218,48 @@ impl<'a> Knob<'a> {
     }
 }
 
-pub fn fmt_param(name: &str, v: f32, min: f32, max: f32) -> String {
-    let n = name.to_ascii_lowercase();
+pub fn fmt_param(name: &str, value: f32, min: f32, max: f32) -> String {
+    let lowercase_name = name.to_ascii_lowercase();
     let span = max - min;
     if span >= 999.0 {
-        if v.abs() >= 1000.0 {
-            return format!("{:.2}k", v / 1000.0);
+        if value.abs() >= 1000.0 {
+            return format!("{:.2}k", value / 1000.0);
         }
-        return format!("{:.0}", v.round());
+        return format!("{:.0}", value.round());
     }
-    if n.contains("attack") || n.contains("decay") || n.contains("release") || n.contains("time") {
-        return format!("{:.0} ms", v);
+    if lowercase_name.contains("attack")
+        || lowercase_name.contains("decay")
+        || lowercase_name.contains("release")
+        || lowercase_name.contains("time")
+    {
+        return format!("{:.0} ms", value);
     }
-    if n.contains("freq") || n.contains("cutoff") || n.contains("hz") {
-        return if v >= 1000.0 {
-            format!("{:.2} kHz", v / 1000.0)
+    if lowercase_name.contains("freq")
+        || lowercase_name.contains("cutoff")
+        || lowercase_name.contains("hz")
+    {
+        return if value >= 1000.0 {
+            format!("{:.2} kHz", value / 1000.0)
         } else {
-            format!("{:.0} Hz", v)
+            format!("{:.0} Hz", value)
         };
     }
-    if n.contains("detune") || n.contains("spread") || n.contains("semitone") {
-        return format!("{:+.2} st", v);
+    if lowercase_name.contains("detune")
+        || lowercase_name.contains("spread")
+        || lowercase_name.contains("semitone")
+    {
+        return format!("{:+.2} st", value);
     }
-    if n.contains("ratio") {
-        return format!("{:.0}:1", v);
+    if lowercase_name.contains("ratio") {
+        return format!("{:.0}:1", value);
     }
     if span <= 1.001 && min >= 0.0 {
-        return format!("{:.0}%", v * 100.0);
+        return format!("{:.0}%", value * 100.0);
     }
     if min < 0.0 {
-        return format!("{:+.2}", v);
+        return format!("{:+.2}", value);
     }
-    format!("{:.2}", v)
+    format!("{:.2}", value)
 }
 
 pub fn chip(ui: &mut egui::Ui, _id: &str, on: &mut bool, label: &str, accent: Color32) -> bool {
@@ -258,22 +273,22 @@ pub fn chip(ui: &mut egui::Ui, _id: &str, on: &mut bool, label: &str, accent: Co
         *on = !*on;
     }
     let active = *on;
-    let bg = if active {
+    let background = if active {
         th::alpha(accent, 46)
     } else if resp.hovered() {
         th::WIDGET_HOT
     } else {
         th::WIDGET
     };
-    let p = ui.painter();
-    p.rect_filled(rect, 4.0, bg);
-    p.rect_stroke(
+    let painter = ui.painter();
+    painter.rect_filled(rect, 4.0, background);
+    painter.rect_stroke(
         rect,
         4.0,
         Stroke::new(1.0, if active { accent } else { th::INSET_EDGE }),
         egui::StrokeKind::Inside,
     );
-    p.galley(
+    painter.galley(
         rect.center() - galley.size() * 0.5,
         galley,
         if active { accent } else { th::TEXT_DIM },
@@ -289,30 +304,30 @@ pub fn segmented<T: Copy + PartialEq>(
     accent: Color32,
 ) -> bool {
     let width = ui.available_width();
-    let h = 20.0;
-    let (rect, _) = ui.allocate_exact_size(vec2(width, h), Sense::hover());
+    let height = 20.0;
+    let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
     let base = ui.scope_id().with(id);
-    let cell = width / options.len().max(1) as f32;
+    let cell_width = width / options.len().max(1) as f32;
     let mut changed = false;
-    let p = ui.painter().clone();
-    p.rect_filled(rect, 4.0, th::INSET_BG);
-    p.rect_stroke(
+    let painter = ui.painter().clone();
+    painter.rect_filled(rect, 4.0, th::INSET_BG);
+    painter.rect_stroke(
         rect,
         4.0,
         Stroke::new(1.0, th::INSET_EDGE),
         egui::StrokeKind::Inside,
     );
-    for (i, (v, label)) in options.iter().enumerate() {
-        let r = Rect::from_min_size(
-            pos2(rect.left() + i as f32 * cell, rect.top()),
-            vec2(cell, h),
+    for (option_index, (option_value, label)) in options.iter().enumerate() {
+        let option_rect = Rect::from_min_size(
+            pos2(rect.left() + option_index as f32 * cell_width, rect.top()),
+            vec2(cell_width, height),
         );
-        let resp = ui.interact(r, base.with(i), Sense::click());
-        if resp.clicked() && *value != *v {
-            *value = *v;
+        let resp = ui.interact(option_rect, base.with(option_index), Sense::click());
+        if resp.clicked() && *value != *option_value {
+            *value = *option_value;
             changed = true;
         }
-        let active = *value == *v;
+        let active = *value == *option_value;
         let color = if active {
             accent
         } else if resp.hovered() {
@@ -321,20 +336,20 @@ pub fn segmented<T: Copy + PartialEq>(
             th::TEXT_FAINT
         };
         if resp.hovered() && !active {
-            p.rect_filled(r.shrink(1.0), 3.0, th::alpha(Color32::WHITE, 8));
+            painter.rect_filled(option_rect.shrink(1.0), 3.0, th::alpha(Color32::WHITE, 8));
         }
-        p.text(
-            r.center() - vec2(0.0, 1.0),
+        painter.text(
+            option_rect.center() - vec2(0.0, 1.0),
             egui::Align2::CENTER_CENTER,
             *label,
             egui::FontId::proportional(10.0),
             color,
         );
         if active {
-            p.rect_filled(
+            painter.rect_filled(
                 Rect::from_min_size(
-                    pos2(r.left() + 5.0, r.bottom() - 3.0),
-                    vec2(cell - 10.0, 2.0),
+                    pos2(option_rect.left() + 5.0, option_rect.bottom() - 3.0),
+                    vec2(cell_width - 10.0, 2.0),
                 ),
                 1.0,
                 accent,
@@ -352,36 +367,40 @@ pub fn glyph_row<T: Copy + PartialEq>(
     accent: Color32,
 ) -> bool {
     let width = ui.available_width();
-    let h = 24.0;
-    let (rect, _) = ui.allocate_exact_size(vec2(width, h), Sense::hover());
+    let height = 24.0;
+    let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
     let base = ui.scope_id().with(id);
-    let cell = width / options.len().max(1) as f32;
+    let cell_width = width / options.len().max(1) as f32;
     let mut changed = false;
-    let p = ui.painter().clone();
-    for (i, (v, g)) in options.iter().enumerate() {
-        let r = Rect::from_min_size(
-            pos2(rect.left() + i as f32 * cell, rect.top()),
-            vec2(cell, h),
+    let painter = ui.painter().clone();
+    for (option_index, (option_value, glyph)) in options.iter().enumerate() {
+        let option_rect = Rect::from_min_size(
+            pos2(rect.left() + option_index as f32 * cell_width, rect.top()),
+            vec2(cell_width, height),
         );
-        let resp = ui.interact(r, base.with(i), Sense::click());
-        if resp.clicked() && *value != *v {
-            *value = *v;
+        let resp = ui.interact(option_rect, base.with(option_index), Sense::click());
+        if resp.clicked() && *value != *option_value {
+            *value = *option_value;
             changed = true;
         }
-        let active = *value == *v;
+        let active = *value == *option_value;
         if active {
-            p.rect_filled(r.shrink2(vec2(3.0, 1.0)), 4.0, th::alpha(accent, 34));
+            painter.rect_filled(
+                option_rect.shrink2(vec2(3.0, 1.0)),
+                4.0,
+                th::alpha(accent, 34),
+            );
         } else if resp.hovered() {
-            p.rect_filled(
-                r.shrink2(vec2(3.0, 1.0)),
+            painter.rect_filled(
+                option_rect.shrink2(vec2(3.0, 1.0)),
                 4.0,
                 th::alpha(Color32::WHITE, 10),
             );
         }
         th::draw_glyph(
-            &p,
-            r.shrink2(vec2(cell * 0.24, 5.0)),
-            *g,
+            &painter,
+            option_rect.shrink2(vec2(cell_width * 0.24, 5.0)),
+            *glyph,
             if active { accent } else { th::TEXT_FAINT },
             1.4,
         );
@@ -398,63 +417,74 @@ pub fn stepper(
     label: &str,
     accent: Color32,
 ) -> bool {
-    let h = 20.0;
+    let height = 20.0;
     let width = ui.available_width();
-    let (rect, _) = ui.allocate_exact_size(vec2(width, h), Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
     let base = ui.scope_id().with(id);
-    let p = ui.painter().clone();
-    p.text(
+    let painter = ui.painter().clone();
+    painter.text(
         pos2(rect.left(), rect.center().y),
         egui::Align2::LEFT_CENTER,
         label,
         egui::FontId::proportional(10.0),
         th::TEXT_DIM,
     );
-    let box_w = 62.0;
-    let bx = rect.right() - box_w;
-    let panel = Rect::from_min_size(pos2(bx, rect.top()), vec2(box_w, h));
-    p.rect_filled(panel, 4.0, th::INSET_BG);
-    p.rect_stroke(
+    let box_width = 62.0;
+    let box_left = rect.right() - box_width;
+    let panel = Rect::from_min_size(pos2(box_left, rect.top()), vec2(box_width, height));
+    painter.rect_filled(panel, 4.0, th::INSET_BG);
+    painter.rect_stroke(
         panel,
         4.0,
         Stroke::new(1.0, th::INSET_EDGE),
         egui::StrokeKind::Inside,
     );
     let mut changed = false;
-    for (i, dir) in [(0usize, -1i32), (1usize, 1i32)] {
-        let r = Rect::from_min_size(
-            pos2(if dir < 0 { bx } else { panel.right() - 18.0 }, rect.top()),
-            vec2(18.0, h),
+    for (button_index, step_direction) in [(0usize, -1i32), (1usize, 1i32)] {
+        let button_rect = Rect::from_min_size(
+            pos2(
+                if step_direction < 0 {
+                    box_left
+                } else {
+                    panel.right() - 18.0
+                },
+                rect.top(),
+            ),
+            vec2(18.0, height),
         );
-        let resp = ui.interact(r, base.with(i), Sense::click());
+        let resp = ui.interact(button_rect, base.with(button_index), Sense::click());
         if resp.clicked() {
-            let next = (*value as i32 + dir).clamp(min as i32, max as i32) as u8;
+            let next = (*value as i32 + step_direction).clamp(min as i32, max as i32) as u8;
             if next != *value {
                 *value = next;
                 changed = true;
             }
         }
         if resp.hovered() {
-            p.rect_filled(r.shrink(1.0), 3.0, th::alpha(Color32::WHITE, 12));
+            painter.rect_filled(button_rect.shrink(1.0), 3.0, th::alpha(Color32::WHITE, 12));
         }
-        let c = r.center();
-        let s = 3.2;
-        let tri = if dir < 0 {
+        let center = button_rect.center();
+        let arrow_size = 3.2;
+        let arrow_points = if step_direction < 0 {
             vec![
-                pos2(c.x + s * 0.6, c.y - s),
-                pos2(c.x + s * 0.6, c.y + s),
-                pos2(c.x - s * 0.7, c.y),
+                pos2(center.x + arrow_size * 0.6, center.y - arrow_size),
+                pos2(center.x + arrow_size * 0.6, center.y + arrow_size),
+                pos2(center.x - arrow_size * 0.7, center.y),
             ]
         } else {
             vec![
-                pos2(c.x - s * 0.6, c.y - s),
-                pos2(c.x - s * 0.6, c.y + s),
-                pos2(c.x + s * 0.7, c.y),
+                pos2(center.x - arrow_size * 0.6, center.y - arrow_size),
+                pos2(center.x - arrow_size * 0.6, center.y + arrow_size),
+                pos2(center.x + arrow_size * 0.7, center.y),
             ]
         };
-        p.add(egui::Shape::convex_polygon(tri, th::TEXT_DIM, Stroke::NONE));
+        painter.add(egui::Shape::convex_polygon(
+            arrow_points,
+            th::TEXT_DIM,
+            Stroke::NONE,
+        ));
     }
-    p.text(
+    painter.text(
         panel.center(),
         egui::Align2::CENTER_CENTER,
         format!("{}", *value),
@@ -475,12 +505,12 @@ pub fn xy_pad(
     let (rect, mut resp) = ui.allocate_exact_size(vec2(size, size), Sense::click_and_drag());
     let mut changed = false;
     if resp.dragged() {
-        let d = resp.drag_delta();
-        let nx = (*x + d.x / size).clamp(0.0, 1.0);
-        let ny = (*y - d.y / size).clamp(0.0, 1.0);
-        if (nx - *x).abs() > f32::EPSILON || (ny - *y).abs() > f32::EPSILON {
-            *x = nx;
-            *y = ny;
+        let drag_delta = resp.drag_delta();
+        let next_x = (*x + drag_delta.x / size).clamp(0.0, 1.0);
+        let next_y = (*y - drag_delta.y / size).clamp(0.0, 1.0);
+        if (next_x - *x).abs() > f32::EPSILON || (next_y - *y).abs() > f32::EPSILON {
+            *x = next_x;
+            *y = next_y;
             changed = true;
             resp.mark_changed();
         }
@@ -491,26 +521,26 @@ pub fn xy_pad(
         changed = true;
         resp.mark_changed();
     }
-    let p = ui.painter();
-    p.rect_filled(rect, 4.0, th::INSET_BG);
-    for i in 1..4 {
-        let f = i as f32 / 4.0;
-        p.line_segment(
+    let painter = ui.painter();
+    painter.rect_filled(rect, 4.0, th::INSET_BG);
+    for division in 1..4 {
+        let fraction = division as f32 / 4.0;
+        painter.line_segment(
             [
-                pos2(rect.left() + rect.width() * f, rect.top()),
-                pos2(rect.left() + rect.width() * f, rect.bottom()),
+                pos2(rect.left() + rect.width() * fraction, rect.top()),
+                pos2(rect.left() + rect.width() * fraction, rect.bottom()),
             ],
             Stroke::new(1.0, th::GRID_LINE),
         );
-        p.line_segment(
+        painter.line_segment(
             [
-                pos2(rect.left(), rect.top() + rect.height() * f),
-                pos2(rect.right(), rect.top() + rect.height() * f),
+                pos2(rect.left(), rect.top() + rect.height() * fraction),
+                pos2(rect.right(), rect.top() + rect.height() * fraction),
             ],
             Stroke::new(1.0, th::GRID_LINE),
         );
     }
-    p.rect_stroke(
+    painter.rect_stroke(
         rect,
         4.0,
         Stroke::new(
@@ -527,17 +557,17 @@ pub fn xy_pad(
         rect.left() + rect.width() * *x,
         rect.bottom() - rect.height() * *y,
     );
-    p.line_segment(
+    painter.line_segment(
         [pos2(dot.x, rect.top()), pos2(dot.x, rect.bottom())],
         Stroke::new(1.0, th::alpha(accent, 70)),
     );
-    p.line_segment(
+    painter.line_segment(
         [pos2(rect.left(), dot.y), pos2(rect.right(), dot.y)],
         Stroke::new(1.0, th::alpha(accent, 70)),
     );
-    p.circle_filled(dot, 7.0, th::alpha(accent, 40));
-    p.circle_filled(dot, 3.4, accent);
-    p.circle_filled(dot, 1.3, th::POINTER);
+    painter.circle_filled(dot, 7.0, th::alpha(accent, 40));
+    painter.circle_filled(dot, 3.4, accent);
+    painter.circle_filled(dot, 1.3, th::POINTER);
     changed
 }
 

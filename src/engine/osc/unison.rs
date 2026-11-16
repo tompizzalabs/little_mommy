@@ -1,30 +1,12 @@
-//! Unison engine.
-//!
-//! Voice layouts (detune shaping, pan positions, gain compensation, stack
-//! intervals) are precomputed and cached; they are only rebuilt when a
-//! layout-affecting parameter actually changes. Per sample the engine only
-//! advances the swarm oscillators (rotation trick, periodically renormalized)
-//! and reads gains from a small pan LUT — no trig or `powf` in the layout
-//! path. Randomness comes from a deterministic seeded RNG so rebuilds are
-//! stable and every note gets its own swarm phase.
-
 use std::f32::consts::{PI, TAU};
 
 pub const MAX_UNISON_VOICES: usize = 16;
-/// Full-scale detune spread at `detune = 1.0`, in cents.
 pub const MAX_DETUNE_CENTS: f32 = 50.0;
 
-/// How detune is spread across voices. The continuous `detune_power`
-/// parameter covers the analytic family (Linear = 0, Exponential = 1,
-/// InvertedExponential = -1, Super = -0.5); these modes add character that
-/// the power curve cannot reach.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum DetuneMode {
-    /// Shaped by the `detune_power` curve.
     Power,
-    /// Random symmetric jitter.
     Random,
-    /// Analog-style mirrored jitter with a dead-center voice.
     Analog,
 }
 
@@ -45,15 +27,10 @@ impl std::fmt::Display for DetuneMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PanMode {
-    /// Even spread across the field.
     Linear,
-    /// Linear, pulled toward the center.
     Center,
-    /// Pushed toward the edges.
     Outer,
-    /// Hard left / hard right alternation.
     Alternating,
-    /// Random symmetric spread.
     Random,
 }
 
@@ -98,38 +75,29 @@ impl StackMode {
 }
 
 impl std::fmt::Display for StackMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = match self {
             StackMode::Unison => "Unison",
             StackMode::Octaves => "Octaves",
             StackMode::Fifths => "Fifths",
             StackMode::OctavesAndFifths => "Oct+Fifth",
         };
-        write!(f, "{}", name)
+        write!(formatter, "{}", name)
     }
 }
 
-/// All inputs the unison engine consumes. `Copy + PartialEq` so the engine
-/// can detect real changes and skip layout rebuilds otherwise.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct UnisonConfig {
     pub voices: u8,
-    /// Detune amount in [0, 1] (scaled to `MAX_DETUNE_CENTS`).
     pub detune: f32,
-    /// Continuous shaping exponent in [-5, 5]; ignored unless
-    /// `detune_mode` is `Power`.
     pub detune_power: f32,
     pub detune_mode: DetuneMode,
     pub pan_mode: PanMode,
     pub stack_mode: StackMode,
-    /// Stereo spread in [0, 1].
     pub width: f32,
-    /// Gain weighting: +1 favors edge voices, -1 favors center voices.
     pub blend: f32,
-    /// Slow per-voice detune/pan movement in [0, 1].
     pub swarm: f32,
     pub swarm_rate_hz: f32,
-    /// Fraction of per-voice phase re-randomization applied on retrigger.
     pub phase_randomization: f32,
 }
 
@@ -164,9 +132,6 @@ impl UnisonConfig {
         self
     }
 
-    /// Fields that define the voice layout; when only these change the
-    /// engine rebuilds. Detune amount and swarm can move per sample without
-    /// invalidating anything.
     fn layout_key(&self) -> Self {
         UnisonConfig {
             voices: self.voices,
@@ -184,11 +149,8 @@ impl UnisonConfig {
     }
 }
 
-/// Per-voice output for one audio sample. Gains include the unison gain
-/// compensation — callers just multiply their oscillator output.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct UnisonFrame {
-    /// Frequency multiplier including detune and stack interval.
     pub pitch_multiplier: f32,
     pub gain_left: f32,
     pub gain_right: f32,
@@ -196,15 +158,10 @@ pub struct UnisonFrame {
 
 #[derive(Debug, Clone, Copy)]
 struct Voice {
-    /// Shaped detune position in [-1, 1] (before the detune amount scale).
     detune_position: f32,
-    /// Stack interval in semitones for this slot.
     stack_semitones: f32,
-    /// Pan position in [-1, 1] (before width scaling).
     base_pan: f32,
-    /// Normalized voice gain.
     gain: f32,
-    /// Swarm rotation state (unit phasor).
     swarm_sin: f32,
     swarm_cos: f32,
     swarm_step_sin: f32,
@@ -226,20 +183,17 @@ impl Default for Voice {
     }
 }
 
-const PAN_LUT_SIZE: usize = 256;
-const PAN_LUT_MASK: usize = PAN_LUT_SIZE - 1;
-const PAN_LUT_SCALE: f32 = PAN_LUT_SIZE as f32 * 0.5;
-const RECIPROCAL_PAN_LUT_SCALE: f32 = 1.0 / PAN_LUT_SCALE;
-/// Maximum swarm detune depth at full swarm amount, in cents.
+const PAN_TABLE_SIZE: usize = 256;
+const PAN_TABLE_MASK: usize = PAN_TABLE_SIZE - 1;
+const PAN_TABLE_SCALE: f32 = PAN_TABLE_SIZE as f32 * 0.5;
+const PAN_TABLE_SCALE_RECIPROCAL: f32 = 1.0 / PAN_TABLE_SCALE;
 pub const SWARM_MAX_CENTS: f32 = 50.0;
-/// Renormalize the swarm phasors every N samples so the rotation trick's
-/// rounding error can never accumulate into a gain drift.
 const RENORMALIZE_INTERVAL: u64 = 4096;
 
 #[derive(Debug, Clone)]
 pub struct UnisonEngine {
     voices: [Voice; MAX_UNISON_VOICES],
-    pan_lut: [(f32, f32); PAN_LUT_SIZE + 1],
+    pan_table: [(f32, f32); PAN_TABLE_SIZE + 1],
     layout_key: Option<UnisonConfig>,
     voice_count: usize,
     swarm_enabled: bool,
@@ -261,7 +215,7 @@ impl UnisonEngine {
     pub fn new(seed: u64) -> Self {
         Self {
             voices: [Voice::default(); MAX_UNISON_VOICES],
-            pan_lut: build_pan_lut(),
+            pan_table: build_pan_table(),
             layout_key: None,
             voice_count: 1,
             swarm_enabled: false,
@@ -274,29 +228,21 @@ impl UnisonEngine {
         }
     }
 
-    /// Re-seed the RNG (per voice/node instance). Invalidates the layout so
-    /// the next `sync` re-rolls randomized layouts and swarm phases.
     pub fn seed(&mut self, seed: u64) {
         self.random = Random::new(seed);
         self.layout_key = None;
     }
 
-    /// Stored phase randomization amount, applied by the oscillator states
-    /// when the note is retriggered.
     #[inline(always)]
     pub fn phase_randomization(&self) -> f32 {
         self.phase_randomization
     }
 
-    /// Number of active voices in the current layout.
     #[inline(always)]
     pub fn voice_count(&self) -> usize {
         self.voice_count
     }
 
-    /// Bring the cached layout in line with `config`. Cheap when nothing
-    /// changed (the common case): one struct compare. Swarm phases survive
-    /// rebuilds so the movement never audibly resets.
     pub fn sync(&mut self, config: UnisonConfig, sample_rate: f32) {
         let config = config.normalized();
         let key = config.layout_key();
@@ -306,14 +252,11 @@ impl UnisonEngine {
             self.layout_key = Some(key);
         }
 
-        // Fast-moving values: applied even when the layout is cached.
         self.swarm_detune_cents = config.swarm * SWARM_MAX_CENTS;
         self.swarm_pan = config.swarm * config.width;
         self.swarm_enabled = config.swarm > 0.0 && self.voice_count > 1;
         self.phase_randomization = finite(config.phase_randomization);
 
-        // Swarm rate lives outside the layout: re-derive only the rotation
-        // steps when it changes, so rate modulation never rebuilds anything.
         if self.swarm_rate_hz != config.swarm_rate_hz {
             let step_angle = TAU * config.swarm_rate_hz / finite(sample_rate).max(1.0);
             let (step_sin, step_cos) = step_angle.sin_cos();
@@ -327,8 +270,6 @@ impl UnisonEngine {
         }
     }
 
-    /// Per-voice frame for this sample. Call exactly once per voice per
-    /// sample; advances that voice's swarm oscillator.
     #[inline(always)]
     pub fn frame(&mut self, index: usize, detune: f32, max_detune_cents: f32) -> UnisonFrame {
         let voice = &mut self.voices[index];
@@ -356,7 +297,7 @@ impl UnisonEngine {
 
         let pitch_multiplier = cents_to_ratio(cents + voice.stack_semitones * 100.0);
 
-        let (gain_left, gain_right) = pan_lut_lookup(&self.pan_lut, pan);
+        let (gain_left, gain_right) = pan_table_lookup(&self.pan_table, pan);
 
         UnisonFrame {
             pitch_multiplier,
@@ -365,7 +306,6 @@ impl UnisonEngine {
         }
     }
 
-    /// Renormalize the swarm phasors.
     pub fn tick(&mut self) {
         self.sample_counter = self.sample_counter.wrapping_add(1);
 
@@ -380,9 +320,6 @@ impl UnisonEngine {
         }
     }
 
-    /// Re-roll per-voice phase offsets in [0, 1] scaled by the stored phase
-    /// randomization amount. Called on note retrigger; oscillator states
-    /// apply the returned offsets to their own phases.
     pub fn reroll_phase_offsets(&mut self) -> [f32; MAX_UNISON_VOICES] {
         let amount = self.phase_randomization;
         let mut offsets = [0.0; MAX_UNISON_VOICES];
@@ -429,8 +366,6 @@ impl UnisonEngine {
             voice.base_pan = pan_positions[index] * config.width;
             voice.gain = gains[index];
 
-            // Fresh swarm phase for newly added voices; existing voices keep
-            // running so parameter tweaks don't restart the movement.
             if first_build || index >= previous_count {
                 let swarm_phase = self.random.next_f32() * TAU;
                 let (sin, cos) = swarm_phase.sin_cos();
@@ -444,31 +379,29 @@ impl UnisonEngine {
 }
 
 #[inline(always)]
-fn pan_lut_lookup(table: &[(f32, f32); PAN_LUT_SIZE + 1], position: f32) -> (f32, f32) {
-    let coordinate = (position + 1.0) * PAN_LUT_SCALE;
-    let index = (coordinate as usize).min(PAN_LUT_MASK);
+fn pan_table_lookup(table: &[(f32, f32); PAN_TABLE_SIZE + 1], position: f32) -> (f32, f32) {
+    let coordinate = (position + 1.0) * PAN_TABLE_SCALE;
+    let index = (coordinate as usize).min(PAN_TABLE_MASK);
     let fraction = coordinate - index as f32;
 
-    let (a_left, a_right) = table[index];
-    let (b_left, b_right) = table[index + 1];
+    let (lower_left, lower_right) = table[index];
+    let (upper_left, upper_right) = table[index + 1];
 
     (
-        a_left + (b_left - a_left) * fraction,
-        a_right + (b_right - a_right) * fraction,
+        lower_left + (upper_left - lower_left) * fraction,
+        lower_right + (upper_right - lower_right) * fraction,
     )
 }
 
-fn build_pan_lut() -> [(f32, f32); PAN_LUT_SIZE + 1] {
-    let mut lut = [(0.0f32, 0.0f32); PAN_LUT_SIZE + 1];
+fn build_pan_table() -> [(f32, f32); PAN_TABLE_SIZE + 1] {
+    let mut table = [(0.0f32, 0.0f32); PAN_TABLE_SIZE + 1];
 
-    for (index, entry) in lut.iter_mut().enumerate() {
-        // Position -1 → angle 0 (full left), +1 → PI/2 (full right),
-        // center → PI/4 (equal-power).
-        let angle = (index as f32 * RECIPROCAL_PAN_LUT_SCALE) * PI * 0.25;
+    for (index, entry) in table.iter_mut().enumerate() {
+        let angle = (index as f32 * PAN_TABLE_SCALE_RECIPROCAL) * PI * 0.25;
         *entry = (angle.cos(), angle.sin());
     }
 
-    lut
+    table
 }
 
 #[inline(always)]
@@ -493,8 +426,6 @@ fn build_detune_positions(
     }
 
     if mode == DetuneMode::Analog {
-        // Analog: jittered mirror of the linear layout — voices come in
-        // slightly-off symmetric pairs, with the center voice pinned.
         for (index, position) in positions.iter_mut().enumerate().take(count) {
             let centered = index as f32 / (count - 1) as f32 * 2.0 - 1.0;
             let jitter = 0.92 + random.next_f32() * 0.16;
@@ -515,7 +446,6 @@ fn build_detune_positions(
         return;
     }
 
-    // Power mode: the continuous detune power curve.
     for (index, position) in positions.iter_mut().enumerate().take(count) {
         let centered = index as f32 / (count - 1) as f32 * 2.0 - 1.0;
         let absolute = centered.abs();
@@ -568,8 +498,6 @@ fn build_pan_positions(
     }
 }
 
-/// Symmetric random positions: mirrored pairs get opposite signs so the
-/// stack stays center-anchored.
 fn random_symmetric_positions(
     positions: &mut [f32; MAX_UNISON_VOICES],
     count: usize,
@@ -590,8 +518,6 @@ fn random_symmetric_positions(
     }
 }
 
-/// Gain weighting across the stack: positive blend emphasizes edge voices,
-/// negative emphasizes the center.
 #[inline(always)]
 fn blend_gain(position: f32, blend: f32) -> f32 {
     if blend.abs() < 1e-4 {
@@ -607,8 +533,6 @@ fn blend_gain(position: f32, blend: f32) -> f32 {
     }
 }
 
-/// Normalize so perceived loudness stays constant across voice counts and
-/// blend settings (equal-power over the actual shaped gains).
 fn normalize_gains(gains: &mut [f32; MAX_UNISON_VOICES], count: usize) {
     let normalization = gains[..count]
         .iter()
@@ -625,7 +549,6 @@ fn normalize_gains(gains: &mut [f32; MAX_UNISON_VOICES], count: usize) {
     }
 }
 
-/// Stack interval in semitones for a voice slot.
 #[inline(always)]
 fn stack_interval(index: usize, mode: StackMode) -> f32 {
     match mode {
@@ -655,7 +578,6 @@ fn finite(value: f32) -> f32 {
     if value.is_finite() { value } else { 0.0 }
 }
 
-/// Small xorshift RNG — deterministic, dependency-free, seeded per node.
 #[derive(Debug, Clone)]
 struct Random {
     state: u64,
@@ -712,7 +634,6 @@ mod tests {
         engine.sync(config, 48_000.0);
         let first = engine.frame(0, 0.3, 50.0);
 
-        // Same config again: layout is cached, frame matches.
         engine.sync(config, 48_000.0);
         let second = engine.frame(0, 0.3, 50.0);
         assert_eq!(first.pitch_multiplier, second.pitch_multiplier);

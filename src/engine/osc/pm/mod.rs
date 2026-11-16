@@ -6,6 +6,11 @@ pub struct PmState {
     pub modulator: OperatorVoice,
 }
 
+const CARRIER_SEED_MIX: u32 = 0x96A5_A9B3;
+const CARRIER_NODE_INDEX_MIX: u32 = 0x27D4_EB2F;
+const MODULATOR_SEED_MIX: u32 = 0xB0E7_3A3D;
+const MODULATOR_NODE_INDEX_MIX: u32 = 0x1656_67B1;
+
 impl PmState {
     #[allow(clippy::too_many_arguments)]
     pub fn next(
@@ -34,17 +39,16 @@ impl PmState {
             .next_mod(carrier_wave, freq, sample_rate, drift_amount, phase_mod)
     }
 
-    /// Re-seed the per-voice operator voices (phase + drift).
     pub fn seed(&mut self, seed_base: u32, node_index: u32) {
         self.carrier.seed(
             seed_base
-                .wrapping_mul(0x96A5_A9B3)
-                .wrapping_add(node_index.wrapping_mul(0x27D4_EB2F)),
+                .wrapping_mul(CARRIER_SEED_MIX)
+                .wrapping_add(node_index.wrapping_mul(CARRIER_NODE_INDEX_MIX)),
         );
         self.modulator.seed(
             seed_base
-                .wrapping_mul(0xB0E7_3A3D)
-                .wrapping_add(node_index.wrapping_mul(0x1656_67B1)),
+                .wrapping_mul(MODULATOR_SEED_MIX)
+                .wrapping_add(node_index.wrapping_mul(MODULATOR_NODE_INDEX_MIX)),
         );
     }
 }

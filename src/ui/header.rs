@@ -60,8 +60,10 @@ pub fn top_bar(
         .width(160.0)
         .height(300.0)
         .show_ui(&mut child, |ui| {
-            for (i, p) in presets.iter().enumerate() {
-                preset_changed |= ui.selectable_value(preset_index, i, p.name).changed();
+            for (candidate_index, preset) in presets.iter().enumerate() {
+                preset_changed |= ui
+                    .selectable_value(preset_index, candidate_index, preset.name)
+                    .changed();
             }
         });
     if preset_changed {
@@ -80,49 +82,49 @@ pub fn top_bar(
         *scene_rect = content_bbox(patch, positions);
     }
 
-    let mut mode = patch.play_mode;
+    let mut selected_mode = patch.play_mode;
     egui::ComboBox::from_id_salt("play_mode_pick")
-        .selected_text(mode.to_string())
+        .selected_text(selected_mode.to_string())
         .width(120.0)
         .show_ui(&mut child, |ui| {
-            for m in PlayMode::ALL {
-                ui.selectable_value(&mut mode, m, m.to_string());
+            for mode in PlayMode::ALL {
+                ui.selectable_value(&mut selected_mode, mode, mode.to_string());
             }
         });
-    if mode != patch.play_mode {
-        patch.play_mode = mode;
+    if selected_mode != patch.play_mode {
+        patch.play_mode = selected_mode;
         patch.version = patch.version.wrapping_add(1);
     }
 
     child.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        let active = patch
+        let active_node_count = patch
             .grid
             .cells
             .iter()
-            .filter(|c| c.params.is_some())
+            .filter(|cell| cell.params.is_some())
             .count();
         let mut gain = params.master_gain.modulated_normalized_value();
-        let resp = Knob::new(&mut gain, 0.0, 1.0)
+        let response = Knob::new(&mut gain, 0.0, 1.0)
             .accent(th::CV)
             .size(26.0)
             .label("MASTER")
             .default(0.8)
             .ui(ui);
-        if resp.response.drag_started() {
+        if response.response.drag_started() {
             setter.begin_set_parameter(&params.master_gain);
         }
-        if resp.response.changed() {
+        if response.response.changed() {
             setter.set_parameter_normalized(&params.master_gain, gain);
         }
-        if resp.response.drag_stopped() {
+        if response.response.drag_stopped() {
             setter.end_set_parameter(&params.master_gain);
         }
         ui.add_space(10.0);
         ui.label(
             egui::RichText::new(format!(
                 "{} NODE{}",
-                active,
-                if active == 1 { "" } else { "S" }
+                active_node_count,
+                if active_node_count == 1 { "" } else { "S" }
             ))
             .size(10.0)
             .color(th::TEXT_FAINT),

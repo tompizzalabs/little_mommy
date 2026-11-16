@@ -22,8 +22,8 @@ pub fn mid_freq(index: usize) -> f32 {
     BASE_FREQ * 2.0f32.powf(index as f32 / TABLES_PER_OCTAVE as f32)
 }
 
-pub fn table_index(f: f32) -> usize {
-    let raw = TABLES_PER_OCTAVE as f32 * (f / BASE_FREQ).log2();
+pub fn table_index(frequency: f32) -> usize {
+    let raw = TABLES_PER_OCTAVE as f32 * (frequency / BASE_FREQ).log2();
     (raw.ceil() as isize).clamp(0, (NUM_TABLES - 1) as isize) as usize
 }
 
@@ -31,16 +31,16 @@ fn build() -> AnalogTables {
     let mut saw = Vec::with_capacity(NUM_TABLES);
     let mut triangle = Vec::with_capacity(NUM_TABLES);
 
-    for i in 0..NUM_TABLES {
-        let f_mid = mid_freq(i);
-        let k_max = (HARMONIC_CEILING / f_mid).floor() as usize;
-        let k_max = k_max.clamp(1, TABLE_LEN / 2);
-        saw.push(build_saw(k_max));
-        triangle.push(build_triangle(k_max));
+    for table_number in 0..NUM_TABLES {
+        let mid_frequency = mid_freq(table_number);
+        let max_harmonic = (HARMONIC_CEILING / mid_frequency).floor() as usize;
+        let max_harmonic = max_harmonic.clamp(1, TABLE_LEN / 2);
+        saw.push(build_saw(max_harmonic));
+        triangle.push(build_triangle(max_harmonic));
     }
 
     let sine = (0..TABLE_LEN)
-        .map(|p| (p as f32 / TABLE_LEN as f32 * std::f32::consts::TAU).sin())
+        .map(|sample_index| (sample_index as f32 / TABLE_LEN as f32 * std::f32::consts::TAU).sin())
         .collect();
 
     AnalogTables {
@@ -50,41 +50,43 @@ fn build() -> AnalogTables {
     }
 }
 
-fn build_saw(k_max: usize) -> Vec<f32> {
+fn build_saw(max_harmonic: usize) -> Vec<f32> {
     let mut table = vec![0.0f32; TABLE_LEN];
-    for k in 1..=k_max {
-        let amp = 1.0 / k as f32;
-        let w = k as f32 * std::f32::consts::TAU / TABLE_LEN as f32;
-        for (p, slot) in table.iter_mut().enumerate() {
-            *slot += amp * (w * p as f32).sin();
+    for harmonic in 1..=max_harmonic {
+        let amplitude = 1.0 / harmonic as f32;
+        let angular_step = harmonic as f32 * std::f32::consts::TAU / TABLE_LEN as f32;
+        for (sample_index, slot) in table.iter_mut().enumerate() {
+            *slot += amplitude * (angular_step * sample_index as f32).sin();
         }
     }
     normalize(&mut table);
     table
 }
 
-fn build_triangle(k_max: usize) -> Vec<f32> {
+fn build_triangle(max_harmonic: usize) -> Vec<f32> {
     let mut table = vec![0.0f32; TABLE_LEN];
-    let mut k = 1usize;
+    let mut harmonic = 1usize;
     let mut sign = 1.0f32;
-    while k <= k_max {
-        let amp = sign / (k * k) as f32;
-        let w = k as f32 * std::f32::consts::TAU / TABLE_LEN as f32;
-        for (p, slot) in table.iter_mut().enumerate() {
-            *slot += amp * (w * p as f32).sin();
+    while harmonic <= max_harmonic {
+        let amplitude = sign / (harmonic * harmonic) as f32;
+        let angular_step = harmonic as f32 * std::f32::consts::TAU / TABLE_LEN as f32;
+        for (sample_index, slot) in table.iter_mut().enumerate() {
+            *slot += amplitude * (angular_step * sample_index as f32).sin();
         }
         sign = -sign;
-        k += 2;
+        harmonic += 2;
     }
     normalize(&mut table);
     table
 }
 
 fn normalize(table: &mut [f32]) {
-    let peak = table.iter().fold(0.0f32, |m, &v| m.max(v.abs()));
+    let peak = table
+        .iter()
+        .fold(0.0f32, |running_peak, &value| running_peak.max(value.abs()));
     if peak > 1e-6 {
-        for v in table.iter_mut() {
-            *v /= peak;
+        for value in table.iter_mut() {
+            *value /= peak;
         }
     }
 }

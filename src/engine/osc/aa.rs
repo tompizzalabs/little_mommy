@@ -1,6 +1,3 @@
-﻿//! DC blocker shared by oscillator stages that add a small offset
-//! (e.g. asymmetric analog character shaping).
-
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DcBlocker {
     x1: f32,

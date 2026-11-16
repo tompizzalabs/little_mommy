@@ -328,8 +328,6 @@ pub fn factory_presets() -> Vec<Preset> {
 }
 
 pub fn default_patch() -> Patch {
-    // Spawn with the Init patch (osc → filter → env → gain → out) so the
-    // envelope is wired in from the very first load.
     let mut grid = Grid::new();
     for (slot, params, in0, in1) in init_cells() {
         grid.set(slot, Some(params), in0, in1);

@@ -1,13 +1,5 @@
-//! Global oscillator drift generator.
-//!
-//! Shared by every oscillator type (analog, FM, PM): a random-walk drift in
-//! semitones, re-rolled every few hundred milliseconds and smoothed. Seeded
-//! per oscillator voice so variation is deterministic and voice-to-voice
-//! independent.
-
 use fastrand::Rng;
 
-/// Full-scale drift depth at `drift = 1.0`, in semitones.
 pub const DRIFT_RANGE_SEMITONES: f32 = 0.2;
 
 #[derive(Debug, Clone)]
@@ -40,7 +32,6 @@ impl DriftGenerator {
         self.rng.f32()
     }
 
-    /// Per-sample drift value in [-1, 1].
     pub fn next(&mut self, sample_rate: f32) -> f32 {
         self.counter += 1;
         if self.counter >= self.interval {

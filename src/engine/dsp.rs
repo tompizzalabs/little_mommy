@@ -1,10 +1,10 @@
 use crate::engine::{
     lfo::{LfoShape, LfoState},
+    osc::unison::{MAX_DETUNE_CENTS, UnisonConfig},
     osc::{
         AnalogShape, AnalogVoiceState, FmState, MAX_UNISON_VOICES, NoiseColor, OperatorWave,
         PmState, VectorState, noise, unison,
     },
-    osc::unison::{MAX_DETUNE_CENTS, UnisonConfig},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -55,7 +55,6 @@ impl Default for NodeState {
 }
 
 impl NodeState {
-    // Parameter lists mirror the node's ParamDef table.
     #[allow(clippy::too_many_arguments)]
     pub fn analog(
         &mut self,
@@ -71,29 +70,26 @@ impl NodeState {
 
         let mut left = 0.0;
         let mut right = 0.0;
-        for i in 0..voices {
-            let frame = self.unison.frame(i, unison.detune, MAX_DETUNE_CENTS);
+        for (voice_index, voice_state) in self.analog.iter_mut().enumerate().take(voices) {
+            let frame = self
+                .unison
+                .frame(voice_index, unison.detune, MAX_DETUNE_CENTS);
             let voice_freq = freq * frame.pitch_multiplier;
-            let sample =
-                self.analog[i]
-                    .next(shape, voice_freq, sample_rate, pulse_width, drift);
+            let sample = voice_state.next(shape, voice_freq, sample_rate, pulse_width, drift);
             left += sample * frame.gain_left;
             right += sample * frame.gain_right;
         }
         self.unison.tick();
         (left, right)
     }
-    /// Re-randomize unison voice phases on note retrigger, scaled by the
-    /// phase randomization amount from the last sync. Zero amount keeps the
-    /// oscillators free-running.
     pub fn retrigger_unison(&mut self) {
         if self.unison.phase_randomization() <= 0.0 {
             return;
         }
 
         let offsets = self.unison.reroll_phase_offsets();
-        for (i, offset) in offsets.iter().enumerate().take(self.unison.voice_count()) {
-            self.analog[i].phase = *offset;
+        for (voice_index, offset) in offsets.iter().enumerate().take(self.unison.voice_count()) {
+            self.analog[voice_index].phase = *offset;
         }
     }
 
@@ -114,17 +110,17 @@ impl NodeState {
             return (0.0, 0.0);
         }
 
-        let normalized = (cutoff / sample_rate).clamp(0.0, 0.45);
-        let f = (2.0 * (std::f32::consts::PI * normalized).sin()).min(1.0);
+        let normalized_cutoff = (cutoff / sample_rate).clamp(0.0, 0.45);
+        let cutoff_coefficient = (2.0 * (std::f32::consts::PI * normalized_cutoff).sin()).min(1.0);
         let damping = 1.0 - resonance.clamp(0.0, 0.95);
 
-        self.low_l += f * self.band_l;
+        self.low_l += cutoff_coefficient * self.band_l;
         let high_l = in_l - self.low_l - damping * self.band_l;
-        self.band_l += f * high_l;
+        self.band_l += cutoff_coefficient * high_l;
 
-        self.low_r += f * self.band_r;
+        self.low_r += cutoff_coefficient * self.band_r;
         let high_r = in_r - self.low_r - damping * self.band_r;
-        self.band_r += f * high_r;
+        self.band_r += cutoff_coefficient * high_r;
 
         if !self.low_l.is_finite() || !self.band_l.is_finite() {
             self.low_l = 0.0;
@@ -153,16 +149,16 @@ impl NodeState {
 
         match self.env_stage {
             EnvStage::Attack => {
-                let c = env_coeff(attack_ms, sample_rate);
-                self.env_value += c * (1.0 - self.env_value);
+                let attack_coefficient = env_coeff(attack_ms, sample_rate);
+                self.env_value += attack_coefficient * (1.0 - self.env_value);
                 if self.env_value >= 0.999 {
                     self.env_value = 1.0;
                     self.env_stage = EnvStage::Decay;
                 }
             }
             EnvStage::Decay => {
-                let c = env_coeff(decay_ms, sample_rate);
-                self.env_value += c * (sustain - self.env_value);
+                let decay_coefficient = env_coeff(decay_ms, sample_rate);
+                self.env_value += decay_coefficient * (sustain - self.env_value);
                 if (self.env_value - sustain).abs() <= 0.001 {
                     self.env_value = sustain;
                     self.env_stage = EnvStage::Sustain;
@@ -172,8 +168,8 @@ impl NodeState {
                 self.env_value = sustain;
             }
             EnvStage::Release => {
-                let c = env_coeff(release_ms, sample_rate);
-                self.env_value -= c * self.env_value;
+                let release_coefficient = env_coeff(release_ms, sample_rate);
+                self.env_value -= release_coefficient * self.env_value;
                 if self.env_value <= 0.0001 {
                     self.env_value = 0.0;
                     self.env_stage = EnvStage::Done;
@@ -190,7 +186,6 @@ impl NodeState {
         self.lfo.next(shape, rate, phase_offset, sample_rate)
     }
 
-    /// FM oscillator: modulator feeds the carrier frequency. Mono (duplicated).
     #[allow(clippy::too_many_arguments)]
     pub fn fm(
         &mut self,
@@ -218,7 +213,6 @@ impl NodeState {
         (mono, mono)
     }
 
-    /// PM oscillator: modulator feeds the carrier phase. Mono (duplicated).
     #[allow(clippy::too_many_arguments)]
     pub fn pm(
         &mut self,
@@ -244,8 +238,6 @@ impl NodeState {
         (mono, mono)
     }
 
-    /// Vector oscillator: X/Y morph between four fixed bandlimited corner
-    /// waves. Mono (duplicated).
     #[allow(clippy::too_many_arguments)]
     pub fn vector(
         &mut self,

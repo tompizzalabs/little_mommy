@@ -1,12 +1,28 @@
-use crate::engine::dsp::{NodeState, cent_ratio, semitone_ratio};
+use crate::engine::dsp::{EnvStage, NodeState, cent_ratio, semitone_ratio};
 use crate::engine::graph::{CompiledGraph, ModLink};
 use crate::engine::node::NodeParams;
+use crate::engine::osc::drift::DriftGenerator;
 use crate::engine::osc::unison::UnisonConfig;
 use nice_plug::util;
 
 const STEAL_FADE_TIME_MS: f32 = 50.0;
 
-/// Gather the unison parameters shared by all unison-capable oscillators.
+const NOISE_SEED_MIX: u32 = 0x9E37_79B9;
+const NOISE_NODE_INDEX_MIX: u32 = 0x85EB_CA6B;
+const LFO_SEED_MIX: u32 = 0x2545_F491;
+const LFO_NODE_INDEX_MIX: u32 = 7;
+const LFO_PHASE_SPREAD: u32 = 991;
+const LFO_VALUE_SPREAD: u32 = 401;
+const UNISON_SEED_MIX: u32 = 0x9E37_79B9;
+const UNISON_NODE_INDEX_MIX: u32 = 0x5BF0_3635;
+const ANALOG_PHASE_SPREAD: u32 = 997;
+const ANALOG_PHASE_VOICE_STEP: u32 = 13;
+const ANALOG_DRIFT_SEED_MIX: u32 = 0xC2B2_AE35;
+const ANALOG_DRIFT_NODE_INDEX_MIX: u32 = 0x27D4_EB2F;
+const ANALOG_DRIFT_VOICE_MIX: u32 = 0x1656_67B1;
+const VECTOR_SEED_MIX: u32 = 0x6A09_E667;
+const VECTOR_NODE_INDEX_MIX: u32 = 0xBB67_AE85;
+
 fn unison_config(params: &NodeParams) -> UnisonConfig {
     match params {
         NodeParams::Analog {
@@ -49,8 +65,6 @@ pub struct Voice {
     pub stealing: bool,
     pub steal_gain: f32,
     pub states: Box<[NodeState]>,
-    // Scratch buses sized to the compiled graph. Grown on demand, never
-    // reallocated while the graph shape is unchanged.
     outputs_l: Vec<f32>,
     outputs_r: Vec<f32>,
     mod_values: Vec<f32>,
@@ -58,70 +72,79 @@ pub struct Voice {
 
 fn mod_offset(links: &[ModLink], param: usize, mods: &[f32]) -> f32 {
     let mut sum = 0.0;
-    for l in links {
-        if l.param as usize == param {
-            sum += mods[l.source as usize] * l.depth;
+    for link in links {
+        if link.param as usize == param {
+            sum += mods[link.source as usize] * link.depth;
         }
     }
     sum
 }
 
-fn modulated(params: &NodeParams, links: &[ModLink], mods: &[f32], i: usize) -> f32 {
-    let d = &params.param_defs()[i];
-    let base = params.param_get(i);
-    let off = mod_offset(links, i, mods);
-    (base + off * (d.max - d.min)).clamp(d.min, d.max)
+fn modulated(params: &NodeParams, links: &[ModLink], mods: &[f32], param_index: usize) -> f32 {
+    let definition = &params.param_defs()[param_index];
+    let base_value = params.param_get(param_index);
+    let offset = mod_offset(links, param_index, mods);
+    (base_value + offset * (definition.max - definition.min)).clamp(definition.min, definition.max)
 }
 
 impl Voice {
     pub fn new(internal_voice_id: u64, note_number: u8, velocity: f32, num_nodes: usize) -> Self {
-        let seed_base = internal_voice_id as u32;
+        let voice_seed = internal_voice_id as u32;
         let mut states: Box<[NodeState]> = vec![NodeState::default(); num_nodes].into_boxed_slice();
 
-        for (index, state) in states.iter_mut().enumerate() {
-            let idx = index as u32;
+        for (node_index, state) in states.iter_mut().enumerate() {
+            let node_index_seed = node_index as u32;
             state.noise.seed(
-                seed_base
-                    .wrapping_mul(0x9E3779B9)
-                    .wrapping_add(idx.wrapping_mul(0x85EBCA6B)),
+                voice_seed
+                    .wrapping_mul(NOISE_SEED_MIX)
+                    .wrapping_add(node_index_seed.wrapping_mul(NOISE_NODE_INDEX_MIX)),
             );
             state.lfo.rng = fastrand::Rng::with_seed(
-                seed_base
-                    .wrapping_mul(0x2545_F491)
-                    .wrapping_add(idx.wrapping_mul(7).wrapping_add(1)) as u64,
+                voice_seed.wrapping_mul(LFO_SEED_MIX).wrapping_add(
+                    node_index_seed
+                        .wrapping_mul(LFO_NODE_INDEX_MIX)
+                        .wrapping_add(1),
+                ) as u64,
             );
-            state.lfo.read_index =
-                ((seed_base.wrapping_add(idx) % 991) as f32) / 991.0 * 512.0;
-            state.lfo.sh_value =
-                ((seed_base.wrapping_add(idx.wrapping_mul(3)) % 401) as f32) / 401.0 * 2.0 - 1.0;
+            state.lfo.read_index = ((voice_seed.wrapping_add(node_index_seed) % LFO_PHASE_SPREAD)
+                as f32)
+                / LFO_PHASE_SPREAD as f32
+                * 512.0;
+            state.lfo.sample_hold_value = ((voice_seed
+                .wrapping_add(node_index_seed.wrapping_mul(3))
+                % LFO_VALUE_SPREAD) as f32)
+                / LFO_VALUE_SPREAD as f32
+                * 2.0
+                - 1.0;
             state.unison.seed(
-                seed_base
-                    .wrapping_mul(0x9E37_79B9)
-                    .wrapping_add(idx.wrapping_mul(0x5BF0_3635)) as u64,
+                voice_seed
+                    .wrapping_mul(UNISON_SEED_MIX)
+                    .wrapping_add(node_index_seed.wrapping_mul(UNISON_NODE_INDEX_MIX))
+                    as u64,
             );
-            state.fm.seed(seed_base, idx);
-            state.pm.seed(seed_base, idx);
+            state.fm.seed(voice_seed, node_index_seed);
+            state.pm.seed(voice_seed, node_index_seed);
             state.vector.seed(
-                seed_base
-                    .wrapping_mul(0x6A09_E667)
-                    .wrapping_add(idx.wrapping_mul(0xBB67_AE85)),
+                voice_seed
+                    .wrapping_mul(VECTOR_SEED_MIX)
+                    .wrapping_add(node_index_seed.wrapping_mul(VECTOR_NODE_INDEX_MIX)),
             );
-            for (v_idx, analog_voice) in state.analog.iter_mut().enumerate() {
-                let v = v_idx as u32;
-                analog_voice.phase = ((seed_base
-                    .wrapping_add(idx)
-                    .wrapping_add(v.wrapping_mul(13))
-                    % 997) as f32)
-                    / 997.0;
+            for (unison_index, analog_voice) in state.analog.iter_mut().enumerate() {
+                let unison_index_seed = unison_index as u32;
+                analog_voice.phase = ((voice_seed
+                    .wrapping_add(node_index_seed)
+                    .wrapping_add(unison_index_seed.wrapping_mul(ANALOG_PHASE_VOICE_STEP))
+                    % ANALOG_PHASE_SPREAD) as f32)
+                    / ANALOG_PHASE_SPREAD as f32;
                 analog_voice.duty_smooth = 0.5;
-                analog_voice.drift = crate::engine::osc::drift::DriftGenerator::new(
-                    seed_base
-                        .wrapping_mul(0xC2B2AE35)
-                        .wrapping_add(idx.wrapping_mul(0x27D4EB2F))
-                        .wrapping_add(v.wrapping_mul(0x165667B1)),
+                analog_voice.drift = DriftGenerator::new(
+                    voice_seed
+                        .wrapping_mul(ANALOG_DRIFT_SEED_MIX)
+                        .wrapping_add(node_index_seed.wrapping_mul(ANALOG_DRIFT_NODE_INDEX_MIX))
+                        .wrapping_add(unison_index_seed.wrapping_mul(ANALOG_DRIFT_VOICE_MIX)),
                 );
             }
-            state.env_stage = crate::engine::dsp::EnvStage::Attack;
+            state.env_stage = EnvStage::Attack;
             state.env_value = 0.0;
         }
 
@@ -168,8 +191,6 @@ impl Voice {
         let base_freq = util::midi_key_to_freq(self.note_number);
         let node_count = compiled.nodes.len();
         if self.outputs_l.len() < node_count {
-            // The graph grew (voices are rebuilt on recompile, so this only
-            // guards a race between graph swap and voice allocation).
             self.outputs_l.resize(node_count, 0.0);
             self.outputs_r.resize(node_count, 0.0);
             self.mod_values.resize(node_count, 0.0);
@@ -182,38 +203,46 @@ impl Voice {
 
         for &slot in compiled.order.iter() {
             let node = &compiled.nodes[slot];
-            let in0_l = node.inputs[0].map(|s| outputs_l[s as usize]).unwrap_or(0.0);
-            let in0_r = node.inputs[0].map(|s| outputs_r[s as usize]).unwrap_or(0.0);
-            let in1_l = node.inputs[1].map(|s| outputs_l[s as usize]).unwrap_or(0.0);
-            let in1_r = node.inputs[1].map(|s| outputs_r[s as usize]).unwrap_or(0.0);
+            let first_input_left = node.inputs[0]
+                .map(|source| outputs_l[source as usize])
+                .unwrap_or(0.0);
+            let first_input_right = node.inputs[0]
+                .map(|source| outputs_r[source as usize])
+                .unwrap_or(0.0);
+            let second_input_left = node.inputs[1]
+                .map(|source| outputs_l[source as usize])
+                .unwrap_or(0.0);
+            let second_input_right = node.inputs[1]
+                .map(|source| outputs_r[source as usize])
+                .unwrap_or(0.0);
             let state = &mut self.states[slot];
             let links = &node.mod_links;
 
-            let (l, r) = match &node.params {
+            let (left, right) = match &node.params {
                 NodeParams::Analog { shape, .. } => {
-                    let semis = modulated(&node.params, links, &mod_values, 0);
-                    let det = modulated(&node.params, links, &mod_values, 1);
-                    let pw = modulated(&node.params, links, &mod_values, 2);
-                    let dr = modulated(&node.params, links, &mod_values, 3);
-                    let ud = modulated(&node.params, links, &mod_values, 4);
-                    let udp = modulated(&node.params, links, &mod_values, 5);
-                    let freq = base_freq * semitone_ratio(semis) * cent_ratio(det);
-                    let mut uni = unison_config(&node.params);
-                    uni.detune = ud;
-                    uni.detune_power = udp;
-                    state.analog(*shape, freq, sample_rate, pw, dr, &uni)
+                    let semitones = modulated(&node.params, links, mod_values, 0);
+                    let detune = modulated(&node.params, links, mod_values, 1);
+                    let pulse_width = modulated(&node.params, links, mod_values, 2);
+                    let drift = modulated(&node.params, links, mod_values, 3);
+                    let unison_detune = modulated(&node.params, links, mod_values, 4);
+                    let unison_detune_power = modulated(&node.params, links, mod_values, 5);
+                    let frequency = base_freq * semitone_ratio(semitones) * cent_ratio(detune);
+                    let mut config = unison_config(&node.params);
+                    config.detune = unison_detune;
+                    config.detune_power = unison_detune_power;
+                    state.analog(*shape, frequency, sample_rate, pulse_width, drift, &config)
                 }
                 NodeParams::Noise { color, .. } => {
-                    let level = modulated(&node.params, links, &mod_values, 0);
-                    let (nl, nr) = state.noise(*color);
-                    (nl * level, nr * level)
+                    let level = modulated(&node.params, links, mod_values, 0);
+                    let (noise_left, noise_right) = state.noise(*color);
+                    (noise_left * level, noise_right * level)
                 }
                 NodeParams::Fm { .. } => {
-                    let semis = modulated(&node.params, links, &mod_values, 0);
-                    let det = modulated(&node.params, links, &mod_values, 1);
-                    let amt = modulated(&node.params, links, &mod_values, 2);
-                    let dr = modulated(&node.params, links, &mod_values, 3);
-                    let freq = base_freq * semitone_ratio(semis) * cent_ratio(det);
+                    let semitones = modulated(&node.params, links, mod_values, 0);
+                    let detune = modulated(&node.params, links, mod_values, 1);
+                    let amount = modulated(&node.params, links, mod_values, 2);
+                    let drift = modulated(&node.params, links, mod_values, 3);
+                    let frequency = base_freq * semitone_ratio(semitones) * cent_ratio(detune);
                     if let NodeParams::Fm {
                         carrier_wave,
                         modulator_wave,
@@ -226,24 +255,24 @@ impl Voice {
                         state.fm(
                             *carrier_wave,
                             *modulator_wave,
-                            freq,
+                            frequency,
                             sample_rate,
-                            amt,
+                            amount,
                             *carrier_ratio as f32,
                             *modulator_ratio as f32,
                             *exponential,
-                            dr,
+                            drift,
                         )
                     } else {
                         (0.0, 0.0)
                     }
                 }
                 NodeParams::Pm { .. } => {
-                    let semis = modulated(&node.params, links, &mod_values, 0);
-                    let det = modulated(&node.params, links, &mod_values, 1);
-                    let amt = modulated(&node.params, links, &mod_values, 2);
-                    let dr = modulated(&node.params, links, &mod_values, 3);
-                    let freq = base_freq * semitone_ratio(semis) * cent_ratio(det);
+                    let semitones = modulated(&node.params, links, mod_values, 0);
+                    let detune = modulated(&node.params, links, mod_values, 1);
+                    let amount = modulated(&node.params, links, mod_values, 2);
+                    let drift = modulated(&node.params, links, mod_values, 3);
+                    let frequency = base_freq * semitone_ratio(semitones) * cent_ratio(detune);
                     if let NodeParams::Pm {
                         carrier_wave,
                         modulator_wave,
@@ -255,81 +284,91 @@ impl Voice {
                         state.pm(
                             *carrier_wave,
                             *modulator_wave,
-                            freq,
+                            frequency,
                             sample_rate,
-                            amt,
+                            amount,
                             *carrier_ratio as f32,
                             *modulator_ratio as f32,
-                            dr,
+                            drift,
                         )
                     } else {
                         (0.0, 0.0)
                     }
                 }
                 NodeParams::Vector { .. } => {
-                    let x = modulated(&node.params, links, &mod_values, 0);
-                    let y = modulated(&node.params, links, &mod_values, 1);
-                    let semis = modulated(&node.params, links, &mod_values, 2);
-                    let det = modulated(&node.params, links, &mod_values, 3);
-                    let dr = modulated(&node.params, links, &mod_values, 4);
-                    let freq = base_freq * semitone_ratio(semis) * cent_ratio(det);
-                    state.vector(freq, sample_rate, x, y, dr)
+                    let x = modulated(&node.params, links, mod_values, 0);
+                    let y = modulated(&node.params, links, mod_values, 1);
+                    let semitones = modulated(&node.params, links, mod_values, 2);
+                    let detune = modulated(&node.params, links, mod_values, 3);
+                    let drift = modulated(&node.params, links, mod_values, 4);
+                    let frequency = base_freq * semitone_ratio(semitones) * cent_ratio(detune);
+                    state.vector(frequency, sample_rate, x, y, drift)
                 }
-                NodeParams::Mix => (in0_l + in1_l, in0_r + in1_r),
+                NodeParams::Mix => (
+                    first_input_left + second_input_left,
+                    first_input_right + second_input_right,
+                ),
                 NodeParams::Filter { .. } => {
-                    let cutoff = modulated(&node.params, links, &mod_values, 0);
-                    let res = modulated(&node.params, links, &mod_values, 1);
-                    state.filter_stereo(in0_l, in0_r, cutoff, res, sample_rate)
+                    let cutoff = modulated(&node.params, links, mod_values, 0);
+                    let resonance = modulated(&node.params, links, mod_values, 1);
+                    state.filter_stereo(
+                        first_input_left,
+                        first_input_right,
+                        cutoff,
+                        resonance,
+                        sample_rate,
+                    )
                 }
                 NodeParams::Env { .. } => {
-                    let a = modulated(&node.params, links, &mod_values, 0);
-                    let d = modulated(&node.params, links, &mod_values, 1);
-                    let s = modulated(&node.params, links, &mod_values, 2);
-                    let r = modulated(&node.params, links, &mod_values, 3);
-                    let env = state.env(sample_rate, a, d, s, r, self.releasing);
+                    let attack = modulated(&node.params, links, mod_values, 0);
+                    let decay = modulated(&node.params, links, mod_values, 1);
+                    let sustain = modulated(&node.params, links, mod_values, 2);
+                    let release = modulated(&node.params, links, mod_values, 3);
+                    let envelope =
+                        state.env(sample_rate, attack, decay, sustain, release, self.releasing);
                     env_present = true;
-                    if state.env_stage != crate::engine::dsp::EnvStage::Done {
+                    if state.env_stage != EnvStage::Done {
                         env_active = true;
                     }
-                    (in0_l * env, in0_r * env)
+                    (first_input_left * envelope, first_input_right * envelope)
                 }
                 NodeParams::Gain { .. } => {
-                    let gain = modulated(&node.params, links, &mod_values, 0);
-                    (in0_l * gain, in0_r * gain)
+                    let gain = modulated(&node.params, links, mod_values, 0);
+                    (first_input_left * gain, first_input_right * gain)
                 }
                 NodeParams::Lfo { shape, .. } => {
-                    let rate = modulated(&node.params, links, &mod_values, 0);
-                    let phase = modulated(&node.params, links, &mod_values, 1);
-                    let v = state.lfo(*shape, rate, phase, sample_rate);
-                    (v, v)
+                    let rate = modulated(&node.params, links, mod_values, 0);
+                    let phase = modulated(&node.params, links, mod_values, 1);
+                    let value = state.lfo(*shape, rate, phase, sample_rate);
+                    (value, value)
                 }
-                NodeParams::Out => (in0_l, in0_r),
+                NodeParams::Out => (first_input_left, first_input_right),
             };
 
-            outputs_l[slot] = l;
-            outputs_r[slot] = r;
+            outputs_l[slot] = left;
+            outputs_r[slot] = right;
 
             mod_values[slot] = match &node.params {
                 NodeParams::Env { .. } => state.env_value,
-                NodeParams::Lfo { .. } => l,
-                _ => (l + r) * 0.5,
+                NodeParams::Lfo { .. } => left,
+                _ => (left + right) * 0.5,
             };
         }
 
         self.env_active = env_present && env_active;
 
-        let mut sum_l = 0.0;
-        let mut sum_r = 0.0;
+        let mut output_left = 0.0;
+        let mut output_right = 0.0;
         for (slot, node) in compiled.nodes.iter().enumerate() {
             if matches!(node.params, NodeParams::Out) {
-                sum_l += outputs_l[slot];
-                sum_r += outputs_r[slot];
+                output_left += outputs_l[slot];
+                output_right += outputs_r[slot];
             }
         }
 
         let steal_curve = self.steal_gain * self.steal_gain;
         let gain = self.velocity_sqrt * steal_curve;
-        (sum_l * gain, sum_r * gain)
+        (output_left * gain, output_right * gain)
     }
 
     pub fn retrigger_envs(&mut self) {

@@ -2,8 +2,6 @@ use crate::engine::node::{Node, NodeParams};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Logical row width used to resolve `InputSel::Prev` (previous node in the
-/// same visual row). The grid itself has no fixed size: cells grow on demand.
 pub const GRID_COLS: usize = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -54,7 +52,7 @@ impl Graph {
     }
 
     pub fn upsert(&mut self, id: u32, params: NodeParams) {
-        if let Some(node) = self.nodes.iter_mut().find(|n| n.id == id) {
+        if let Some(node) = self.nodes.iter_mut().find(|node| node.id == id) {
             node.params = params;
             return;
         }
@@ -66,7 +64,8 @@ impl Graph {
         if from == to {
             return;
         }
-        self.edges.retain(|e| !(e.to == to && e.port == port));
+        self.edges
+            .retain(|edge| !(edge.to == to && edge.port == port));
         self.edges.push(Edge { from, to, port });
     }
 
@@ -74,7 +73,8 @@ impl Graph {
         if from == to {
             return;
         }
-        self.mod_edges.retain(|e| !(e.to == to && e.param == param));
+        self.mod_edges
+            .retain(|edge| !(edge.to == to && edge.param == param));
         self.mod_edges.push(ModEdge {
             from,
             to,
@@ -84,13 +84,14 @@ impl Graph {
     }
 
     pub fn remove(&mut self, id: u32) {
-        self.nodes.retain(|n| n.id != id);
-        self.edges.retain(|e| e.from != id && e.to != id);
-        self.mod_edges.retain(|e| e.from != id && e.to != id);
+        self.nodes.retain(|node| node.id != id);
+        self.edges.retain(|edge| edge.from != id && edge.to != id);
+        self.mod_edges
+            .retain(|edge| edge.from != id && edge.to != id);
     }
 
     pub fn node(&self, id: u32) -> Option<&Node> {
-        self.nodes.iter().find(|n| n.id == id)
+        self.nodes.iter().find(|node| node.id == id)
     }
 }
 
@@ -136,21 +137,17 @@ impl Grid {
         Self { cells: Vec::new() }
     }
 
-    /// Grow the grid so that `slot` exists. New cells are empty by default.
     fn ensure(&mut self, slot: usize) {
         if self.cells.len() <= slot {
             self.cells.resize(slot + 1, Cell::default());
         }
     }
 
-    /// Place a node in the first empty slot, appending a new cell if the grid
-    /// is full. Returns the slot index. This is how the grid grows: there is
-    /// no upper bound on the number of nodes.
     pub fn insert(&mut self, params: NodeParams, in0: InputSel, in1: InputSel) -> usize {
         let slot = self
             .cells
             .iter()
-            .position(|c| c.params.is_none())
+            .position(|cell| cell.params.is_none())
             .unwrap_or(self.cells.len());
         self.ensure(slot);
         let cell = &mut self.cells[slot];
@@ -169,15 +166,15 @@ impl Grid {
         cell.in1 = in1;
     }
 
-    pub fn resolve(&self, slot: usize, sel: InputSel) -> Option<u32> {
-        match sel {
+    pub fn resolve(&self, slot: usize, selection: InputSel) -> Option<u32> {
+        match selection {
             InputSel::None => None,
             InputSel::Slot(source) => {
                 let source = source as usize;
                 if self
                     .cells
                     .get(source)
-                    .and_then(|c| c.params.as_ref())
+                    .and_then(|cell| cell.params.as_ref())
                     .is_some()
                 {
                     Some(source as u32)
@@ -223,7 +220,7 @@ impl Grid {
                 if self
                     .cells
                     .get(source)
-                    .and_then(|c| c.params.as_ref())
+                    .and_then(|cell| cell.params.as_ref())
                     .is_some()
                 {
                     graph.connect_mod(source as u32, slot as u32, link.param, link.depth);
@@ -269,46 +266,46 @@ impl CompiledGraph {
         let mut depths: Vec<(u32, u32)> = graph
             .nodes
             .iter()
-            .map(|n| (n.id, depth_of(graph, n.id, &mut stack, &mut memo)))
+            .map(|node| (node.id, depth_of(graph, node.id, &mut stack, &mut memo)))
             .collect();
 
         depths.sort_by_key(|&(id, depth)| (depth, id));
 
-        let mut slot_of: HashMap<u32, usize> = HashMap::new();
+        let mut slot_by_node_id: HashMap<u32, usize> = HashMap::new();
         for (slot, (id, _)) in depths.iter().enumerate() {
-            slot_of.insert(*id, slot);
+            slot_by_node_id.insert(*id, slot);
         }
 
         let mut nodes = Vec::with_capacity(depths.len());
         for (id, _) in depths.iter() {
-            let source = match graph.node(*id) {
-                Some(n) => n,
+            let node = match graph.node(*id) {
+                Some(node) => node,
                 None => continue,
             };
 
             let mut inputs: [Option<u32>; 2] = [None, None];
-            for edge in graph.edges.iter().filter(|e| e.to == *id) {
+            for edge in graph.edges.iter().filter(|edge| edge.to == *id) {
                 let port = edge.port as usize;
                 if port < 2
-                    && let Some(&slot) = slot_of.get(&edge.from)
+                    && let Some(&slot) = slot_by_node_id.get(&edge.from)
                 {
                     inputs[port] = Some(slot as u32);
                 }
             }
 
             let mut mod_links = Vec::new();
-            for edge in graph.mod_edges.iter().filter(|e| e.to == *id) {
-                if let Some(&src_slot) = slot_of.get(&edge.from) {
+            for edge in graph.mod_edges.iter().filter(|edge| edge.to == *id) {
+                if let Some(&source_slot) = slot_by_node_id.get(&edge.from) {
                     mod_links.push(ModLink {
                         param: edge.param,
-                        source: src_slot as u32,
+                        source: source_slot as u32,
                         depth: edge.depth,
                     });
                 }
             }
 
             nodes.push(CompiledNode {
-                params: source.params.clone(),
+                params: node.params.clone(),
                 inputs,
                 mod_links,
             });
@@ -329,10 +326,10 @@ fn depth_of(graph: &Graph, id: u32, stack: &mut Vec<u32>, memo: &mut HashMap<u32
     }
     stack.push(id);
     let mut depth = 0;
-    for edge in graph.edges.iter().filter(|e| e.to == id) {
+    for edge in graph.edges.iter().filter(|edge| edge.to == id) {
         depth = depth.max(depth_of(graph, edge.from, stack, memo) + 1);
     }
-    for edge in graph.mod_edges.iter().filter(|e| e.to == id) {
+    for edge in graph.mod_edges.iter().filter(|edge| edge.to == id) {
         depth = depth.max(depth_of(graph, edge.from, stack, memo) + 1);
     }
     stack.pop();

@@ -1,7 +1,7 @@
 pub mod analog_tables;
 
-pub use super::drift::DriftGenerator;
 pub use super::drift::DRIFT_RANGE_SEMITONES;
+pub use super::drift::DriftGenerator;
 
 use analog_tables::TABLE_LEN;
 
@@ -26,14 +26,14 @@ impl AnalogShape {
 }
 
 impl std::fmt::Display for AnalogShape {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = match self {
             AnalogShape::Saw => "Saw",
             AnalogShape::Square => "Square",
             AnalogShape::Triangle => "Triangle",
             AnalogShape::Sine => "Sine",
         };
-        write!(f, "{}", name)
+        write!(formatter, "{}", name)
     }
 }
 
@@ -70,51 +70,59 @@ impl AnalogVoiceState {
         let tables = analog_tables::get();
 
         let drift_semitones = self.drift.next(sample_rate) * drift * DRIFT_RANGE_SEMITONES;
-        let f = (freq * 2.0f32.powf(drift_semitones / 12.0)).max(0.0);
+        let drifted_frequency = (freq * 2.0f32.powf(drift_semitones / 12.0)).max(0.0);
 
         let duty = pulse_width.clamp(0.02, 0.98);
         self.duty_smooth = self.duty_smooth * PWM_SMOOTH_FACTOR + (1.0 - PWM_SMOOTH_FACTOR) * duty;
 
-        let idx = analog_tables::table_index(f);
-        let saw_table = &tables.saw[idx];
+        let mip_index = analog_tables::table_index(drifted_frequency);
+        let saw_table = &tables.saw[mip_index];
 
-        let pos = self.phase * TABLE_LEN as f32;
-        let i0 = pos as usize & (TABLE_LEN - 1);
-        let i1 = (i0 + 1) & (TABLE_LEN - 1);
-        let frac = pos - pos.floor();
-        let saw = lerp(saw_table[i0], saw_table[i1], frac);
+        let position = self.phase * TABLE_LEN as f32;
+        let first_index = position as usize & (TABLE_LEN - 1);
+        let next_index = (first_index + 1) & (TABLE_LEN - 1);
+        let fraction = position - position.floor();
+        let saw = lerp(saw_table[first_index], saw_table[next_index], fraction);
 
-        let out = match shape {
+        let output = match shape {
             AnalogShape::Saw => saw,
             AnalogShape::Square => {
-                let duty_modded = self.duty_smooth;
-                let pos_off = pos + duty_modded * TABLE_LEN as f32;
-                let j0 = pos_off as usize & (TABLE_LEN - 1);
-                let j1 = (j0 + 1) & (TABLE_LEN - 1);
-                let frac_off = pos_off - pos_off.floor();
-                let saw_off = lerp(saw_table[j0], saw_table[j1], frac_off);
+                let smoothed_duty = self.duty_smooth;
+                let offset_position = position + smoothed_duty * TABLE_LEN as f32;
+                let offset_first_index = offset_position as usize & (TABLE_LEN - 1);
+                let offset_next_index = (offset_first_index + 1) & (TABLE_LEN - 1);
+                let offset_fraction = offset_position - offset_position.floor();
+                let offset_saw = lerp(
+                    saw_table[offset_first_index],
+                    saw_table[offset_next_index],
+                    offset_fraction,
+                );
 
-                let d = duty_modded.rem_euclid(1.0);
-                let square_scale = 2.0 * (1.0 - d).max(d);
-                (saw - saw_off) * square_scale * SQUARE_VOLUME_SCALAR
+                let normalized_duty = smoothed_duty.rem_euclid(1.0);
+                let square_scale = 2.0 * (1.0 - normalized_duty).max(normalized_duty);
+                (saw - offset_saw) * square_scale * SQUARE_VOLUME_SCALAR
             }
             AnalogShape::Triangle => {
-                let tri = &tables.triangle[idx];
-                lerp(tri[i0], tri[i1], frac)
+                let triangle_table = &tables.triangle[mip_index];
+                lerp(
+                    triangle_table[first_index],
+                    triangle_table[next_index],
+                    fraction,
+                )
             }
             AnalogShape::Sine => {
-                let s = &tables.sine;
-                lerp(s[i0], s[i1], frac)
+                let sine_table = &tables.sine;
+                lerp(sine_table[first_index], sine_table[next_index], fraction)
             }
         };
 
-        self.phase += f / sample_rate;
+        self.phase += drifted_frequency / sample_rate;
         self.phase -= self.phase.floor();
 
-        out
+        output
     }
 }
 
-fn lerp(a: f32, b: f32, t: f32) -> f32 {
-    a + (b - a) * t
+fn lerp(start: f32, end: f32, amount: f32) -> f32 {
+    start + (end - start) * amount
 }

@@ -1,4 +1,4 @@
-﻿use std::f32::consts::PI;
+use std::f32::consts::PI;
 use std::sync::LazyLock;
 
 pub const NUMBER_OF_LFO_TABLES: usize = 13;
@@ -44,61 +44,66 @@ impl Spectrum {
 
     fn pulse(&mut self, duty: f32, gain: f32) {
         self.dc += gain * (2.0 * duty - 1.0);
-        for k in 1..=HARMONICS {
-            let kf = k as f32;
-            let (s, c) = (TAU * kf * duty).sin_cos();
-            let g = 2.0 * gain / (PI * kf);
-            self.cos[k - 1] += g * s;
-            self.sin[k - 1] += g * (1.0 - c);
+        for harmonic in 1..=HARMONICS {
+            let harmonic_index = harmonic as f32;
+            let (sine_component, cosine_component) = (TAU * harmonic_index * duty).sin_cos();
+            let amplitude = 2.0 * gain / (PI * harmonic_index);
+            self.cos[harmonic - 1] += amplitude * sine_component;
+            self.sin[harmonic - 1] += amplitude * (1.0 - cosine_component);
         }
     }
 
     fn render(self) -> [f32; LFO_TABLE_LENGTH] {
-        let mut out = [0.0; LFO_TABLE_LENGTH];
-        for (i, slot) in out.iter_mut().enumerate() {
-            let t = i as f32 / LFO_TABLE_LENGTH as f32;
-            let mut v = self.dc;
-            for k in 1..=HARMONICS {
-                let (s, c) = (TAU * k as f32 * t).sin_cos();
-                v += self.cos[k - 1] * c + self.sin[k - 1] * s;
+        let mut output = [0.0; LFO_TABLE_LENGTH];
+        for (sample_index, slot) in output.iter_mut().enumerate() {
+            let time = sample_index as f32 / LFO_TABLE_LENGTH as f32;
+            let mut value = self.dc;
+            for harmonic in 1..=HARMONICS {
+                let (sine_component, cosine_component) = (TAU * harmonic as f32 * time).sin_cos();
+                value += self.cos[harmonic - 1] * cosine_component
+                    + self.sin[harmonic - 1] * sine_component;
             }
-            *slot = v;
+            *slot = value;
         }
-        out
+        output
     }
 }
 
 fn square(duty: f32) -> [f32; LFO_TABLE_LENGTH] {
-    let mut s = Spectrum::new();
-    s.pulse(duty, 1.0);
-    s.render()
+    let mut spectrum = Spectrum::new();
+    spectrum.pulse(duty, 1.0);
+    spectrum.render()
 }
 
-fn stair(n: usize) -> [f32; LFO_TABLE_LENGTH] {
-    let mut s = Spectrum::new();
-    let g = -1.0 / (n as f32 - 1.0);
-    for j in 1..n {
-        s.pulse(j as f32 / n as f32, g);
+fn stair(steps: usize) -> [f32; LFO_TABLE_LENGTH] {
+    let mut spectrum = Spectrum::new();
+    let gain = -1.0 / (steps as f32 - 1.0);
+    for step in 1..steps {
+        spectrum.pulse(step as f32 / steps as f32, gain);
     }
-    s.render()
+    spectrum.render()
 }
 
-fn pyramid(n: usize) -> [f32; LFO_TABLE_LENGTH] {
-    let mut s = Spectrum::new();
-    let g = 2.0 / n as f32;
-    s.dc += g - 1.0;
-    for j in 1..n {
-        s.pulse(j as f32 / n as f32, if j <= n / 2 { -g } else { g });
+fn pyramid(steps: usize) -> [f32; LFO_TABLE_LENGTH] {
+    let mut spectrum = Spectrum::new();
+    let gain = 2.0 / steps as f32;
+    spectrum.dc += gain - 1.0;
+    for step in 1..steps {
+        spectrum.pulse(
+            step as f32 / steps as f32,
+            if step <= steps / 2 { -gain } else { gain },
+        );
     }
-    s.render()
+    spectrum.render()
 }
 
 fn spike() -> [f32; LFO_TABLE_LENGTH] {
-    let mut s = Spectrum::new();
-    s.dc = -1.0 / 3.0;
-    for k in 1..=HARMONICS {
-        let kf = k as f32;
-        s.cos[k - 1] = 8.0 / (PI * PI * kf * kf) * if k % 2 == 0 { 1.0 } else { -1.0 };
+    let mut spectrum = Spectrum::new();
+    spectrum.dc = -1.0 / 3.0;
+    for harmonic in 1..=HARMONICS {
+        let harmonic_index = harmonic as f32;
+        spectrum.cos[harmonic - 1] = 8.0 / (PI * PI * harmonic_index * harmonic_index)
+            * if harmonic % 2 == 0 { 1.0 } else { -1.0 };
     }
-    s.render()
+    spectrum.render()
 }

@@ -1,7 +1,7 @@
 use crate::engine::lfo::LfoShape;
 use crate::engine::osc::{
-    AnalogShape, NoiseColor, unison::{DetuneMode, PanMode, StackMode},
-    OperatorWave,
+    AnalogShape, NoiseColor, OperatorWave,
+    unison::{DetuneMode, PanMode, StackMode},
 };
 use serde::{Deserialize, Serialize};
 
@@ -111,7 +111,7 @@ const FM_DEFS: &[ParamDef] = &[
         max: 1.0,
     },
 ];
-const PM_DEFS: &[ParamDef] = &FM_DEFS;
+const PM_DEFS: &[ParamDef] = FM_DEFS;
 const VECTOR_DEFS: &[ParamDef] = &[
     ParamDef {
         name: "X",
@@ -410,8 +410,8 @@ impl NodeParams {
         }
     }
 
-    pub fn param_get(&self, i: usize) -> f32 {
-        match (self, i) {
+    pub fn param_get(&self, param_index: usize) -> f32 {
+        match (self, param_index) {
             (NodeParams::Analog { semitones, .. }, 0) => *semitones,
             (NodeParams::Analog { detune, .. }, 1) => *detune,
             (NodeParams::Analog { pulse_width, .. }, 2) => *pulse_width,
@@ -427,7 +427,12 @@ impl NodeParams {
             (NodeParams::Analog { unison_width, .. }, 6) => *unison_width,
             (NodeParams::Analog { unison_blend, .. }, 7) => *unison_blend,
             (NodeParams::Analog { unison_swarm, .. }, 8) => *unison_swarm,
-            (NodeParams::Analog { unison_swarm_rate, .. }, 9) => *unison_swarm_rate,
+            (
+                NodeParams::Analog {
+                    unison_swarm_rate, ..
+                },
+                9,
+            ) => *unison_swarm_rate,
             (
                 NodeParams::Analog {
                     unison_phase_randomization,
@@ -462,54 +467,59 @@ impl NodeParams {
         }
     }
 
-    pub fn param_set(&mut self, i: usize, v: f32) {
-        match (self, i) {
-            (NodeParams::Analog { semitones, .. }, 0) => *semitones = v,
-            (NodeParams::Analog { detune, .. }, 1) => *detune = v,
-            (NodeParams::Analog { pulse_width, .. }, 2) => *pulse_width = v,
-            (NodeParams::Analog { drift, .. }, 3) => *drift = v,
-            (NodeParams::Analog { unison_detune, .. }, 4) => *unison_detune = v,
+    pub fn param_set(&mut self, param_index: usize, value: f32) {
+        match (self, param_index) {
+            (NodeParams::Analog { semitones, .. }, 0) => *semitones = value,
+            (NodeParams::Analog { detune, .. }, 1) => *detune = value,
+            (NodeParams::Analog { pulse_width, .. }, 2) => *pulse_width = value,
+            (NodeParams::Analog { drift, .. }, 3) => *drift = value,
+            (NodeParams::Analog { unison_detune, .. }, 4) => *unison_detune = value,
             (
                 NodeParams::Analog {
                     unison_detune_power,
                     ..
                 },
                 5,
-            ) => *unison_detune_power = v,
-            (NodeParams::Analog { unison_width, .. }, 6) => *unison_width = v,
-            (NodeParams::Analog { unison_blend, .. }, 7) => *unison_blend = v,
-            (NodeParams::Analog { unison_swarm, .. }, 8) => *unison_swarm = v,
-            (NodeParams::Analog { unison_swarm_rate, .. }, 9) => *unison_swarm_rate = v,
+            ) => *unison_detune_power = value,
+            (NodeParams::Analog { unison_width, .. }, 6) => *unison_width = value,
+            (NodeParams::Analog { unison_blend, .. }, 7) => *unison_blend = value,
+            (NodeParams::Analog { unison_swarm, .. }, 8) => *unison_swarm = value,
+            (
+                NodeParams::Analog {
+                    unison_swarm_rate, ..
+                },
+                9,
+            ) => *unison_swarm_rate = value,
             (
                 NodeParams::Analog {
                     unison_phase_randomization,
                     ..
                 },
                 10,
-            ) => *unison_phase_randomization = v,
-            (NodeParams::Noise { level, .. }, 0) => *level = v,
-            (NodeParams::Fm { semitones, .. }, 0) => *semitones = v,
-            (NodeParams::Fm { detune, .. }, 1) => *detune = v,
-            (NodeParams::Fm { amount, .. }, 2) => *amount = v,
-            (NodeParams::Fm { drift, .. }, 3) => *drift = v,
-            (NodeParams::Pm { semitones, .. }, 0) => *semitones = v,
-            (NodeParams::Pm { detune, .. }, 1) => *detune = v,
-            (NodeParams::Pm { amount, .. }, 2) => *amount = v,
-            (NodeParams::Pm { drift, .. }, 3) => *drift = v,
-            (NodeParams::Vector { x, .. }, 0) => *x = v,
-            (NodeParams::Vector { y, .. }, 1) => *y = v,
-            (NodeParams::Vector { semitones, .. }, 2) => *semitones = v,
-            (NodeParams::Vector { detune, .. }, 3) => *detune = v,
-            (NodeParams::Vector { drift, .. }, 4) => *drift = v,
-            (NodeParams::Filter { cutoff, .. }, 0) => *cutoff = v,
-            (NodeParams::Filter { resonance, .. }, 1) => *resonance = v,
-            (NodeParams::Env { attack, .. }, 0) => *attack = v,
-            (NodeParams::Env { decay, .. }, 1) => *decay = v,
-            (NodeParams::Env { sustain, .. }, 2) => *sustain = v,
-            (NodeParams::Env { release, .. }, 3) => *release = v,
-            (NodeParams::Gain { gain, .. }, 0) => *gain = v,
-            (NodeParams::Lfo { rate, .. }, 0) => *rate = v,
-            (NodeParams::Lfo { phase, .. }, 1) => *phase = v,
+            ) => *unison_phase_randomization = value,
+            (NodeParams::Noise { level, .. }, 0) => *level = value,
+            (NodeParams::Fm { semitones, .. }, 0) => *semitones = value,
+            (NodeParams::Fm { detune, .. }, 1) => *detune = value,
+            (NodeParams::Fm { amount, .. }, 2) => *amount = value,
+            (NodeParams::Fm { drift, .. }, 3) => *drift = value,
+            (NodeParams::Pm { semitones, .. }, 0) => *semitones = value,
+            (NodeParams::Pm { detune, .. }, 1) => *detune = value,
+            (NodeParams::Pm { amount, .. }, 2) => *amount = value,
+            (NodeParams::Pm { drift, .. }, 3) => *drift = value,
+            (NodeParams::Vector { x, .. }, 0) => *x = value,
+            (NodeParams::Vector { y, .. }, 1) => *y = value,
+            (NodeParams::Vector { semitones, .. }, 2) => *semitones = value,
+            (NodeParams::Vector { detune, .. }, 3) => *detune = value,
+            (NodeParams::Vector { drift, .. }, 4) => *drift = value,
+            (NodeParams::Filter { cutoff, .. }, 0) => *cutoff = value,
+            (NodeParams::Filter { resonance, .. }, 1) => *resonance = value,
+            (NodeParams::Env { attack, .. }, 0) => *attack = value,
+            (NodeParams::Env { decay, .. }, 1) => *decay = value,
+            (NodeParams::Env { sustain, .. }, 2) => *sustain = value,
+            (NodeParams::Env { release, .. }, 3) => *release = value,
+            (NodeParams::Gain { gain, .. }, 0) => *gain = value,
+            (NodeParams::Lfo { rate, .. }, 0) => *rate = value,
+            (NodeParams::Lfo { phase, .. }, 1) => *phase = value,
             _ => {}
         }
     }
