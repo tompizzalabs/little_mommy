@@ -1,3 +1,7 @@
+use crate::engine::filter::{
+    CombFilter, DiodeFilter, FormantFilter, Korg35Filter, LadderFilter, SemFilter,
+    StateVariableFilter,
+};
 use crate::engine::{
     lfo::{LfoShape, LfoState},
     osc::unison::{MAX_DETUNE_CENTS, UnisonConfig},
@@ -22,16 +26,19 @@ pub struct NodeState {
     pub unison: unison::UnisonEngine,
     pub analog: [AnalogVoiceState; MAX_UNISON_VOICES],
     pub noise: noise::NoiseState,
-    pub low_l: f32,
-    pub band_l: f32,
-    pub low_r: f32,
-    pub band_r: f32,
     pub env_stage: EnvStage,
     pub env_value: f32,
     pub lfo: LfoState,
     pub fm: FmState,
     pub pm: PmState,
     pub vector: VectorState,
+    pub ladder: LadderFilter,
+    pub sem: SemFilter,
+    pub korg35: Korg35Filter,
+    pub diode: DiodeFilter,
+    pub formant: FormantFilter,
+    pub comb: CombFilter,
+    pub state_variable: StateVariableFilter,
 }
 
 impl Default for NodeState {
@@ -40,16 +47,19 @@ impl Default for NodeState {
             unison: unison::UnisonEngine::default(),
             analog: std::array::from_fn(|_| AnalogVoiceState::default()),
             noise: noise::NoiseState::default(),
-            low_l: 0.0,
-            band_l: 0.0,
-            low_r: 0.0,
-            band_r: 0.0,
             env_stage: EnvStage::Done,
             env_value: 0.0,
             lfo: LfoState::default(),
             fm: FmState::default(),
             pm: PmState::default(),
             vector: VectorState::default(),
+            ladder: LadderFilter::default(),
+            sem: SemFilter::default(),
+            korg35: Korg35Filter::default(),
+            diode: DiodeFilter::default(),
+            formant: FormantFilter::default(),
+            comb: CombFilter::default(),
+            state_variable: StateVariableFilter::default(),
         }
     }
 }
@@ -98,40 +108,102 @@ impl NodeState {
         (mono, mono)
     }
 
-    pub fn filter_stereo(
+    #[allow(clippy::too_many_arguments)]
+    pub fn filter(
         &mut self,
-        in_l: f32,
-        in_r: f32,
+        kind: crate::engine::filter::FilterKind,
+        input_left: f32,
+        input_right: f32,
         cutoff: f32,
         resonance: f32,
+        transition: f32,
+        vowel_left: usize,
+        vowel_right: usize,
+        saturation: f32,
         sample_rate: f32,
     ) -> (f32, f32) {
-        if sample_rate <= 0.0 {
-            return (0.0, 0.0);
+        use crate::engine::filter::{FilterKind, LadderMode};
+
+        match kind {
+            FilterKind::Ladder4LowPass => {
+                self.ladder.set_mode(LadderMode::LowPass4);
+                self.ladder.set_saturation(saturation);
+                let mono = self.ladder.process(input_left, cutoff, resonance, sample_rate);
+                (mono, mono)
+            }
+            FilterKind::Ladder2LowPass => {
+                self.ladder.set_mode(LadderMode::LowPass2);
+                self.ladder.set_saturation(saturation);
+                let mono = self.ladder.process(input_left, cutoff, resonance, sample_rate);
+                (mono, mono)
+            }
+            FilterKind::Ladder4BandPass => {
+                self.ladder.set_mode(LadderMode::BandPass4);
+                self.ladder.set_saturation(saturation);
+                let mono = self.ladder.process(input_left, cutoff, resonance, sample_rate);
+                (mono, mono)
+            }
+            FilterKind::Ladder2BandPass => {
+                self.ladder.set_mode(LadderMode::BandPass2);
+                self.ladder.set_saturation(saturation);
+                let mono = self.ladder.process(input_left, cutoff, resonance, sample_rate);
+                (mono, mono)
+            }
+            FilterKind::Ladder4HighPass => {
+                self.ladder.set_mode(LadderMode::HighPass4);
+                self.ladder.set_saturation(saturation);
+                let mono = self.ladder.process(input_left, cutoff, resonance, sample_rate);
+                (mono, mono)
+            }
+            FilterKind::Ladder2HighPass => {
+                self.ladder.set_mode(LadderMode::HighPass2);
+                self.ladder.set_saturation(saturation);
+                let mono = self.ladder.process(input_left, cutoff, resonance, sample_rate);
+                (mono, mono)
+            }
+            FilterKind::Sem => {
+                let mono = self.sem.process(input_left, cutoff, resonance, transition, sample_rate);
+                (mono, mono)
+            }
+            FilterKind::Korg35LowPass => {
+                self.korg35.set_lowpass();
+                self.korg35.set_saturation(saturation);
+                let mono = self.korg35.process(input_left, cutoff, resonance, sample_rate);
+                (mono, mono)
+            }
+            FilterKind::Korg35HighPass => {
+                self.korg35.set_highpass();
+                self.korg35.set_saturation(saturation);
+                let mono = self.korg35.process(input_left, cutoff, resonance, sample_rate);
+                (mono, mono)
+            }
+            FilterKind::Diode => {
+                self.diode.set_saturation(saturation);
+                let mono = self.diode.process(input_left, cutoff, resonance, sample_rate);
+                (mono, mono)
+            }
+            FilterKind::Formant => {
+                let mono = self.formant.process(
+                    input_left,
+                    transition.clamp(0.0, 1.0),
+                    vowel_left,
+                    vowel_right,
+                    sample_rate,
+                );
+                (mono, mono)
+            }
+            FilterKind::Comb => {
+                let mono = self.comb.process(input_left, cutoff, resonance, sample_rate);
+                (mono, mono)
+            }
+            FilterKind::StateVariable => self.state_variable.process_stereo(
+                input_left,
+                input_right,
+                cutoff,
+                resonance,
+                sample_rate,
+            ),
         }
-
-        let normalized_cutoff = (cutoff / sample_rate).clamp(0.0, 0.45);
-        let cutoff_coefficient = (2.0 * (std::f32::consts::PI * normalized_cutoff).sin()).min(1.0);
-        let damping = 1.0 - resonance.clamp(0.0, 0.95);
-
-        self.low_l += cutoff_coefficient * self.band_l;
-        let high_l = in_l - self.low_l - damping * self.band_l;
-        self.band_l += cutoff_coefficient * high_l;
-
-        self.low_r += cutoff_coefficient * self.band_r;
-        let high_r = in_r - self.low_r - damping * self.band_r;
-        self.band_r += cutoff_coefficient * high_r;
-
-        if !self.low_l.is_finite() || !self.band_l.is_finite() {
-            self.low_l = 0.0;
-            self.band_l = 0.0;
-        }
-        if !self.low_r.is_finite() || !self.band_r.is_finite() {
-            self.low_r = 0.0;
-            self.band_r = 0.0;
-        }
-
-        (self.low_l, self.low_r)
     }
 
     pub fn env(

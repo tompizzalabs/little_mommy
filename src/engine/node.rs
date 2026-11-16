@@ -1,3 +1,4 @@
+use crate::engine::filter::FilterKind;
 use crate::engine::lfo::LfoShape;
 use crate::engine::osc::{
     AnalogShape, NoiseColor, OperatorWave,
@@ -148,7 +149,27 @@ const FILTER_DEFS: &[ParamDef] = &[
     ParamDef {
         name: "Res",
         min: 0.0,
-        max: 0.95,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Morph",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Vowel L",
+        min: 0.0,
+        max: 7.0,
+    },
+    ParamDef {
+        name: "Vowel R",
+        min: 0.0,
+        max: 7.0,
+    },
+    ParamDef {
+        name: "Sat",
+        min: 0.0,
+        max: 1.0,
     },
 ];
 const ENV_DEFS: &[ParamDef] = &[
@@ -246,8 +267,13 @@ pub enum NodeParams {
     },
     Mix,
     Filter {
+        kind: FilterKind,
         cutoff: f32,
         resonance: f32,
+        transition: f32,
+        vowel_left: f32,
+        vowel_right: f32,
+        saturation: f32,
     },
     Env {
         attack: f32,
@@ -327,8 +353,13 @@ impl NodeParams {
             },
             NodeKind::Mix => NodeParams::Mix,
             NodeKind::Filter => NodeParams::Filter {
+                kind: FilterKind::StateVariable,
                 cutoff: 8000.0,
                 resonance: 0.2,
+                transition: 0.5,
+                vowel_left: 0.0,
+                vowel_right: 1.0,
+                saturation: 0.0,
             },
             NodeKind::Env => NodeParams::Env {
                 attack: 5.0,
@@ -456,6 +487,10 @@ impl NodeParams {
             (NodeParams::Vector { drift, .. }, 4) => *drift,
             (NodeParams::Filter { cutoff, .. }, 0) => *cutoff,
             (NodeParams::Filter { resonance, .. }, 1) => *resonance,
+            (NodeParams::Filter { transition, .. }, 2) => *transition,
+            (NodeParams::Filter { vowel_left, .. }, 3) => *vowel_left,
+            (NodeParams::Filter { vowel_right, .. }, 4) => *vowel_right,
+            (NodeParams::Filter { saturation, .. }, 5) => *saturation,
             (NodeParams::Env { attack, .. }, 0) => *attack,
             (NodeParams::Env { decay, .. }, 1) => *decay,
             (NodeParams::Env { sustain, .. }, 2) => *sustain,
@@ -513,6 +548,10 @@ impl NodeParams {
             (NodeParams::Vector { drift, .. }, 4) => *drift = value,
             (NodeParams::Filter { cutoff, .. }, 0) => *cutoff = value,
             (NodeParams::Filter { resonance, .. }, 1) => *resonance = value,
+            (NodeParams::Filter { transition, .. }, 2) => *transition = value,
+            (NodeParams::Filter { vowel_left, .. }, 3) => *vowel_left = value,
+            (NodeParams::Filter { vowel_right, .. }, 4) => *vowel_right = value,
+            (NodeParams::Filter { saturation, .. }, 5) => *saturation = value,
             (NodeParams::Env { attack, .. }, 0) => *attack = value,
             (NodeParams::Env { decay, .. }, 1) => *decay = value,
             (NodeParams::Env { sustain, .. }, 2) => *sustain = value,

@@ -311,13 +311,26 @@ impl Voice {
                 NodeParams::Filter { .. } => {
                     let cutoff = modulated(&node.params, links, mod_values, 0);
                     let resonance = modulated(&node.params, links, mod_values, 1);
-                    state.filter_stereo(
-                        first_input_left,
-                        first_input_right,
-                        cutoff,
-                        resonance,
-                        sample_rate,
-                    )
+                    let transition = modulated(&node.params, links, mod_values, 2) * 2.0 - 1.0;
+                    let vowel_left = modulated(&node.params, links, mod_values, 3);
+                    let vowel_right = modulated(&node.params, links, mod_values, 4);
+                    let saturation = modulated(&node.params, links, mod_values, 5);
+                    if let NodeParams::Filter { kind, .. } = &node.params {
+                        state.filter(
+                            *kind,
+                            first_input_left,
+                            first_input_right,
+                            cutoff,
+                            resonance,
+                            transition,
+                            vowel_left as usize,
+                            vowel_right as usize,
+                            saturation,
+                            sample_rate,
+                        )
+                    } else {
+                        (0.0, 0.0)
+                    }
                 }
                 NodeParams::Env { .. } => {
                     let attack = modulated(&node.params, links, mod_values, 0);

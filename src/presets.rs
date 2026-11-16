@@ -40,8 +40,13 @@ fn init_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
         (
             1,
             NodeParams::Filter {
+                kind: crate::engine::filter::FilterKind::StateVariable,
                 cutoff: 8000.0,
                 resonance: 0.2,
+                transition: 0.5,
+                vowel_left: 0.0,
+                vowel_right: 1.0,
+                saturation: 0.0,
             },
             InputSel::Slot(0),
             InputSel::None,
@@ -88,8 +93,13 @@ fn pluck_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
         (
             3,
             NodeParams::Filter {
+                kind: crate::engine::filter::FilterKind::StateVariable,
                 cutoff: 3000.0,
                 resonance: 0.35,
+                transition: 0.5,
+                vowel_left: 0.0,
+                vowel_right: 1.0,
+                saturation: 0.0,
             },
             InputSel::Slot(2),
             InputSel::None,
@@ -144,8 +154,13 @@ fn pad_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
         (
             3,
             NodeParams::Filter {
+                kind: crate::engine::filter::FilterKind::StateVariable,
                 cutoff: 2200.0,
                 resonance: 0.15,
+                transition: 0.5,
+                vowel_left: 0.0,
+                vowel_right: 1.0,
+                saturation: 0.0,
             },
             InputSel::Slot(2),
             InputSel::None,
@@ -182,8 +197,13 @@ fn bass_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
         (
             1,
             NodeParams::Filter {
+                kind: crate::engine::filter::FilterKind::StateVariable,
                 cutoff: 450.0,
                 resonance: 0.3,
+                transition: 0.5,
+                vowel_left: 0.0,
+                vowel_right: 1.0,
+                saturation: 0.0,
             },
             InputSel::Slot(0),
             InputSel::None,
@@ -265,8 +285,13 @@ fn vector_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
         (
             1,
             NodeParams::Filter {
+                kind: crate::engine::filter::FilterKind::StateVariable,
                 cutoff: 3500.0,
                 resonance: 0.2,
+                transition: 0.5,
+                vowel_left: 0.0,
+                vowel_right: 1.0,
+                saturation: 0.0,
             },
             InputSel::Slot(0),
             InputSel::None,
