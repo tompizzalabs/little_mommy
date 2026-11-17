@@ -550,7 +550,58 @@ pub struct Node {
     pub params: NodeParams,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum ModSpan {
+    Linear(f32),
+    Semitones(f32),
+}
+
 impl NodeParams {
+    pub fn apply_modulation(&self, param_index: usize, offset: f32) -> f32 {
+        let definition = &self.param_defs()[param_index];
+        let base_value = self.param_get(param_index);
+        let value = match self.modulation_span(param_index) {
+            ModSpan::Linear(units) => base_value + offset * units,
+            ModSpan::Semitones(range) => base_value * (offset * range / 12.0).exp2(),
+        };
+        value.clamp(definition.min, definition.max)
+    }
+
+    fn modulation_span(&self, param_index: usize) -> ModSpan {
+        match (self.kind(), param_index) {
+            (NodeKind::Analog, 0)
+            | (NodeKind::Fm, 0)
+            | (NodeKind::Pm, 0)
+            | (NodeKind::Vector, 2) => ModSpan::Linear(24.0),
+            (NodeKind::Analog, 1)
+            | (NodeKind::Fm, 1)
+            | (NodeKind::Pm, 1)
+            | (NodeKind::Vector, 3) => ModSpan::Linear(1200.0),
+            (NodeKind::Analog, 5) | (NodeKind::Analog, 9) => ModSpan::Linear(5.0),
+            (NodeKind::Filter, 0) => ModSpan::Semitones(64.0),
+            (NodeKind::Filter, 3) | (NodeKind::Filter, 4) => ModSpan::Linear(7.0),
+            (NodeKind::Env, 0) | (NodeKind::Env, 1) | (NodeKind::Env, 3) => {
+                ModSpan::Semitones(36.0)
+            }
+            (NodeKind::Lfo, 0) => ModSpan::Semitones(48.0),
+            (NodeKind::Delay, 0) => ModSpan::Linear(1.0),
+            (NodeKind::Phaser, 0) => ModSpan::Semitones(24.0),
+            (NodeKind::Phaser, 1) => ModSpan::Linear(2000.0),
+            (NodeKind::Phaser, 2) => ModSpan::Linear(1.5),
+            (NodeKind::Bitcrusher, 0) => ModSpan::Linear(8.0),
+            (NodeKind::RingMod, 0) => ModSpan::Semitones(24.0),
+            (NodeKind::Equalizer, 0) => ModSpan::Semitones(64.0),
+            (NodeKind::Equalizer, 1) => ModSpan::Linear(4.0),
+            (NodeKind::Equalizer, 2) => ModSpan::Linear(24.0),
+            (NodeKind::Reverb, 0) => ModSpan::Linear(0.04),
+            (NodeKind::Reverb, 1)
+            | (NodeKind::Reverb, 2)
+            | (NodeKind::Reverb, 3)
+            | (NodeKind::Reverb, 4) => ModSpan::Semitones(36.0),
+            _ => ModSpan::Linear(1.0),
+        }
+    }
+
     pub fn default_for(kind: NodeKind) -> Self {
         match kind {
             NodeKind::Analog => NodeParams::Analog {
@@ -971,5 +1022,96 @@ impl NodeParams {
             (NodeParams::Reverb { mix, .. }, 5) => *mix = value,
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zero_modulation_returns_base_value() {
+        for kind in [
+            NodeKind::Analog,
+            NodeKind::Filter,
+            NodeKind::Env,
+            NodeKind::Delay,
+            NodeKind::Equalizer,
+        ] {
+            let params = NodeParams::default_for(kind);
+            let definition_count = params.param_defs().len();
+            for param_index in 0..definition_count {
+                let base = params.param_get(param_index);
+                let modulated = params.apply_modulation(param_index, 0.0);
+                assert!(
+                    (modulated - base).abs() < 1e-6,
+                    "{kind:?} param {param_index}: zero offset must not change the base value"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cutoff_modulation_is_octave_scaled() {
+        let mut loud = NodeParams::default_for(NodeKind::Filter);
+        loud.param_set(0, 500.0);
+
+        let down_one_octave = loud.apply_modulation(0, -12.0 / 64.0);
+        assert!(
+            (down_one_octave - 250.0).abs() < 0.5,
+            "depth tuned for one octave must move 500 Hz to 250 Hz, got {down_one_octave}"
+        );
+
+        let mut floor = NodeParams::default_for(NodeKind::Filter);
+        floor.param_set(0, 20.0);
+        let floored = floor.apply_modulation(0, -1.0);
+        assert!(
+            (floored - 20.0).abs() < 1e-4,
+            "cutoff must clamp at its minimum, got {floored}"
+        );
+    }
+
+    #[test]
+    fn pitch_modulation_spans_24_semitones() {
+        let params = NodeParams::default_for(NodeKind::Analog);
+        let up = params.apply_modulation(0, 1.0);
+        let down = params.apply_modulation(0, -1.0);
+        assert!(
+            (up - 24.0).abs() < 1e-4,
+            "full depth up must be +24 semitones, got {up}"
+        );
+        assert!(
+            (down + 24.0).abs() < 1e-4,
+            "full depth down must be -24 semitones, got {down}"
+        );
+    }
+
+    #[test]
+    fn envelope_times_scale_exponentially() {
+        let mut params = NodeParams::default_for(NodeKind::Env);
+        params.param_set(1, 250.0);
+        let longer = params.apply_modulation(1, 1.0);
+        let shorter = params.apply_modulation(1, -1.0);
+        assert!(
+            (longer - 2000.0).abs() < 1.0,
+            "full depth up must be 8x decay time, got {longer}"
+        );
+        assert!(
+            (shorter - 31.25).abs() < 0.1,
+            "full depth down must be 1/8x decay time, got {shorter}"
+        );
+    }
+
+    #[test]
+    fn linear_params_stay_additive() {
+        let mut params = NodeParams::default_for(NodeKind::Gain);
+        params.param_set(0, 0.5);
+        let boosted = params.apply_modulation(0, 1.0);
+        assert!(
+            (boosted - 1.0).abs() < 1e-6,
+            "gain must clamp at maximum, got {boosted}"
+        );
+        let cut = params.apply_modulation(0, -1.0);
+        assert!(cut.abs() < 1e-6, "gain must clamp at minimum, got {cut}");
     }
 }

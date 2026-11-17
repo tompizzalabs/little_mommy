@@ -81,10 +81,8 @@ fn mod_offset(links: &[ModLink], param: usize, mods: &[f32]) -> f32 {
 }
 
 fn modulated(params: &NodeParams, links: &[ModLink], mods: &[f32], param_index: usize) -> f32 {
-    let definition = &params.param_defs()[param_index];
-    let base_value = params.param_get(param_index);
     let offset = mod_offset(links, param_index, mods);
-    (base_value + offset * (definition.max - definition.min)).clamp(definition.min, definition.max)
+    params.apply_modulation(param_index, offset)
 }
 
 impl Voice {
