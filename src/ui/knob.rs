@@ -1,4 +1,4 @@
-use super::theme::{self as th, Glyph};
+use super::theme::{self as th};
 use egui::{Color32, Pos2, Rect, Sense, Stroke, pos2, vec2};
 
 pub struct KnobOut {
@@ -355,55 +355,6 @@ pub fn segmented<T: Copy + PartialEq>(
                 accent,
             );
         }
-    }
-    changed
-}
-
-pub fn glyph_row<T: Copy + PartialEq>(
-    ui: &mut egui::Ui,
-    id: &str,
-    value: &mut T,
-    options: &[(T, Glyph)],
-    accent: Color32,
-) -> bool {
-    let width = ui.available_width();
-    let height = 24.0;
-    let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
-    let base = ui.scope_id().with(id);
-    let cell_width = width / options.len().max(1) as f32;
-    let mut changed = false;
-    let painter = ui.painter().clone();
-    for (option_index, (option_value, glyph)) in options.iter().enumerate() {
-        let option_rect = Rect::from_min_size(
-            pos2(rect.left() + option_index as f32 * cell_width, rect.top()),
-            vec2(cell_width, height),
-        );
-        let resp = ui.interact(option_rect, base.with(option_index), Sense::click());
-        if resp.clicked() && *value != *option_value {
-            *value = *option_value;
-            changed = true;
-        }
-        let active = *value == *option_value;
-        if active {
-            painter.rect_filled(
-                option_rect.shrink2(vec2(3.0, 1.0)),
-                4.0,
-                th::alpha(accent, 34),
-            );
-        } else if resp.hovered() {
-            painter.rect_filled(
-                option_rect.shrink2(vec2(3.0, 1.0)),
-                4.0,
-                th::alpha(Color32::WHITE, 10),
-            );
-        }
-        th::draw_glyph(
-            &painter,
-            option_rect.shrink2(vec2(cell_width * 0.24, 5.0)),
-            *glyph,
-            if active { accent } else { th::TEXT_FAINT },
-            1.4,
-        );
     }
     changed
 }

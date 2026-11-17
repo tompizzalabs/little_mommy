@@ -382,10 +382,7 @@ pub fn fill_under(points: &[Pos2], baseline: f32, color: Color32) -> Shape {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Glyph {
-    Sine,
-    Tri,
     Saw,
-    Square,
     Noise,
     Env,
     Lfo,
@@ -426,18 +423,8 @@ pub fn draw_glyph(painter: &egui::Painter, rect: Rect, glyph: Glyph, color: Colo
             .collect()
     };
     let shape = match glyph {
-        Glyph::Sine => Shape::line(wave(&|t| (t * std::f32::consts::TAU).sin(), 26), stroke),
         Glyph::Lfo => Shape::line(
             wave(&|t| (t * std::f32::consts::TAU).sin() * 0.85, 26),
-            stroke,
-        ),
-        Glyph::Tri => Shape::line(
-            vec![
-                point_at(0.0, 0.5),
-                point_at(0.25, 0.0),
-                point_at(0.75, 1.0),
-                point_at(1.0, 0.5),
-            ],
             stroke,
         ),
         Glyph::Saw => Shape::line(
@@ -445,17 +432,6 @@ pub fn draw_glyph(painter: &egui::Painter, rect: Rect, glyph: Glyph, color: Colo
                 point_at(0.0, 1.0),
                 point_at(0.5, 0.0),
                 point_at(0.5, 1.0),
-                point_at(1.0, 0.0),
-            ],
-            stroke,
-        ),
-        Glyph::Square => Shape::line(
-            vec![
-                point_at(0.0, 1.0),
-                point_at(0.0, 0.0),
-                point_at(0.5, 0.0),
-                point_at(0.5, 1.0),
-                point_at(1.0, 1.0),
                 point_at(1.0, 0.0),
             ],
             stroke,

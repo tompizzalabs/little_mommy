@@ -25,6 +25,51 @@ impl WaveShape for LfoShape {
     }
 }
 
+impl WaveShape for crate::engine::osc::AnalogShape {
+    #[inline(always)]
+    fn sample_at(self, t: f32) -> f32 {
+        match self {
+            crate::engine::osc::AnalogShape::Saw => 2.0 * t - 1.0,
+            crate::engine::osc::AnalogShape::ReverseSaw => 1.0 - 2.0 * t,
+            crate::engine::osc::AnalogShape::Square => {
+                if t < 0.5 {
+                    1.0
+                } else {
+                    -1.0
+                }
+            }
+            crate::engine::osc::AnalogShape::Triangle => {
+                if t < 0.5 {
+                    -1.0 + 4.0 * t
+                } else {
+                    1.0 - 4.0 * (t - 0.5)
+                }
+            }
+            crate::engine::osc::AnalogShape::Sharktooth => {
+                let split = 0.78;
+                if t < split {
+                    let normalized = t / split;
+                    -1.0 + 2.0 * normalized * normalized
+                } else {
+                    1.0 - 2.0 * (t - split) / (1.0 - split)
+                }
+            }
+            crate::engine::osc::AnalogShape::Sine => (t * std::f32::consts::TAU).sin(),
+            crate::engine::osc::AnalogShape::Morph => {
+                if t < 0.5 {
+                    -1.0 + 4.0 * t
+                } else {
+                    1.0 - 4.0 * (t - 0.5)
+                }
+            }
+        }
+    }
+    #[inline]
+    fn label(self) -> String {
+        self.to_string()
+    }
+}
+
 pub fn wave_shape_picker<S: WaveShape>(
     ui: &mut egui::Ui,
     id: &str,

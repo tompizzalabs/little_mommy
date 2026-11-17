@@ -142,12 +142,37 @@ pub fn preview_analog(
         return;
     }
 
-    let table: &[f32] = match shape {
-        AnalogShape::Triangle => &tables.triangle[mip_index],
-        AnalogShape::Sine => &tables.sine,
-        _ => saw,
-    };
-    wave_preview(ui, width, color, move |t| read(table, t * TABLE_LENGTH));
+    match shape {
+        AnalogShape::ReverseSaw => {
+            wave_preview(ui, width, color, move |t| -read(saw, t * TABLE_LENGTH));
+        }
+        AnalogShape::Sharktooth => {
+            wave_preview(ui, width, color, |t| {
+                let split = 0.78;
+                if t < split {
+                    let normalized = t / split;
+                    -1.0 + 2.0 * normalized * normalized
+                } else {
+                    1.0 - 2.0 * (t - split) / (1.0 - split)
+                }
+            });
+        }
+        AnalogShape::Morph => {
+            let triangle = &tables.triangle[mip_index];
+            wave_preview(ui, width, color, move |t| {
+                let position = t * TABLE_LENGTH;
+                (read(saw, position) + read(triangle, position)) * 0.5
+            });
+        }
+        _ => {
+            let table: &[f32] = match shape {
+                AnalogShape::Triangle => &tables.triangle[mip_index],
+                AnalogShape::Sine => &tables.sine,
+                _ => saw,
+            };
+            wave_preview(ui, width, color, move |t| read(table, t * TABLE_LENGTH));
+        }
+    }
 }
 
 #[inline(always)]

@@ -11,7 +11,7 @@ use crate::engine::{
     osc::unison::{MAX_DETUNE_CENTS, UnisonConfig},
     osc::{
         AnalogShape, AnalogVoiceState, FmState, MAX_UNISON_VOICES, NoiseColor, OperatorWave,
-        PmState, VectorState, noise, unison,
+        PmState, SyncIn, SyncOut, VectorState, noise, unison,
     },
 };
 
@@ -30,6 +30,7 @@ pub struct NodeState {
     pub unison: unison::UnisonEngine,
     pub analog: [AnalogVoiceState; MAX_UNISON_VOICES],
     pub noise: noise::NoiseState,
+    pub sync_out: SyncOut,
     pub env_stage: EnvStage,
     pub env_value: f32,
     pub lfo: LfoState,
@@ -60,6 +61,7 @@ impl Default for NodeState {
             unison: unison::UnisonEngine::default(),
             analog: std::array::from_fn(|_| AnalogVoiceState::default()),
             noise: noise::NoiseState::default(),
+            sync_out: SyncOut::default(),
             env_stage: EnvStage::Done,
             env_value: 0.0,
             lfo: LfoState::default(),
@@ -95,7 +97,9 @@ impl NodeState {
         sample_rate: f32,
         pulse_width: f32,
         drift: f32,
+        morph: f32,
         unison: &UnisonConfig,
+        sync: Option<SyncIn>,
     ) -> (f32, f32) {
         self.unison.sync(*unison, sample_rate);
         let voices = self.unison.voice_count();
@@ -107,10 +111,19 @@ impl NodeState {
                 .unison
                 .frame(voice_index, unison.detune, MAX_DETUNE_CENTS);
             let voice_freq = freq * frame.pitch_multiplier;
-            let sample = voice_state.next(shape, voice_freq, sample_rate, pulse_width, drift);
+            let sample = voice_state.next(
+                shape,
+                voice_freq,
+                sample_rate,
+                pulse_width,
+                drift,
+                morph,
+                sync,
+            );
             left += sample * frame.gain_left;
             right += sample * frame.gain_right;
         }
+        self.sync_out = self.analog[0].sync_out();
         self.unison.tick();
         (left, right)
     }
@@ -121,7 +134,7 @@ impl NodeState {
 
         let offsets = self.unison.reroll_phase_offsets();
         for (voice_index, offset) in offsets.iter().enumerate().take(self.unison.voice_count()) {
-            self.analog[voice_index].phase = *offset;
+            self.analog[voice_index].set_phase(*offset);
         }
     }
 

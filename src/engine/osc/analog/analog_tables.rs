@@ -27,6 +27,31 @@ pub fn table_index(frequency: f32) -> usize {
     (raw.ceil() as isize).clamp(0, (NUM_TABLES - 1) as isize) as usize
 }
 
+pub fn band_pos(frequency: f32) -> (usize, f32) {
+    let scaled = frequency.max(BASE_FREQ) / BASE_FREQ;
+    let raw = TABLES_PER_OCTAVE as f32 * scaled.log2();
+    let band = ((raw.floor() as isize).clamp(0, (NUM_TABLES - 2) as isize)) as usize;
+    let mix = (raw - band as f32).clamp(0.0, 1.0);
+    (band, mix)
+}
+
+pub fn read_sine(position: f32) -> f32 {
+    read_table(&get().sine, position)
+}
+
+pub fn read_band_pair(tables: &[Vec<f32>], band: usize, band_mix: f32, position: f32) -> f32 {
+    let lower = read_table(&tables[band], position);
+    let upper = read_table(&tables[band + 1], position);
+    lower + (upper - lower) * band_mix
+}
+
+fn read_table(table: &[f32], position: f32) -> f32 {
+    let first_index = (position as usize) & (TABLE_LEN - 1);
+    let next_index = (first_index + 1) & (TABLE_LEN - 1);
+    let fraction = position - position.floor();
+    table[first_index] + (table[next_index] - table[first_index]) * fraction
+}
+
 fn build() -> AnalogTables {
     let mut saw = Vec::with_capacity(NUM_TABLES);
     let mut triangle = Vec::with_capacity(NUM_TABLES);

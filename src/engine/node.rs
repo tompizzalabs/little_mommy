@@ -2,7 +2,7 @@ use crate::engine::effects::DistortionAlgorithm;
 use crate::engine::filter::FilterKind;
 use crate::engine::lfo::LfoShape;
 use crate::engine::osc::{
-    AnalogShape, NoiseColor, OperatorWave,
+    AnalogShape, NoiseColor, OperatorWave, OscillatorModel, SyncMode,
     unison::{DetuneMode, PanMode, StackMode},
 };
 use serde::{Deserialize, Serialize};
@@ -91,6 +91,16 @@ const ANALOG_DEFS: &[ParamDef] = &[
     },
     ParamDef {
         name: "Phase R",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Morph",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Sync D",
         min: 0.0,
         max: 1.0,
     },
@@ -415,9 +425,11 @@ const EMPTY_DEFS: &[ParamDef] = &[];
 pub enum NodeParams {
     Analog {
         shape: AnalogShape,
+        model: OscillatorModel,
         semitones: f32,
         detune: f32,
         pulse_width: f32,
+        morph: f32,
         drift: f32,
         unison_voices: u8,
         unison_detune: f32,
@@ -430,6 +442,9 @@ pub enum NodeParams {
         unison_swarm: f32,
         unison_swarm_rate: f32,
         unison_phase_randomization: f32,
+        sync_mode: SyncMode,
+        sync_source: u8,
+        sync_depth: f32,
     },
     Noise {
         color: NoiseColor,
@@ -606,9 +621,11 @@ impl NodeParams {
         match kind {
             NodeKind::Analog => NodeParams::Analog {
                 shape: AnalogShape::Saw,
+                model: OscillatorModel::Discrete,
                 semitones: 0.0,
                 detune: 0.0,
                 pulse_width: 0.25,
+                morph: 0.0,
                 drift: 0.0,
                 unison_voices: 1,
                 unison_detune: 0.0,
@@ -621,6 +638,9 @@ impl NodeParams {
                 unison_swarm: 0.0,
                 unison_swarm_rate: 0.15,
                 unison_phase_randomization: 0.0,
+                sync_mode: SyncMode::Off,
+                sync_source: 0,
+                sync_depth: 0.6,
             },
             NodeKind::Noise => NodeParams::Noise {
                 color: NoiseColor::White,
@@ -864,6 +884,8 @@ impl NodeParams {
                 },
                 10,
             ) => *unison_phase_randomization,
+            (NodeParams::Analog { morph, .. }, 11) => *morph,
+            (NodeParams::Analog { sync_depth, .. }, 12) => *sync_depth,
             (NodeParams::Noise { level, .. }, 0) => *level,
             (NodeParams::Fm { semitones, .. }, 0) => *semitones,
             (NodeParams::Fm { detune, .. }, 1) => *detune,
@@ -959,6 +981,8 @@ impl NodeParams {
                 },
                 10,
             ) => *unison_phase_randomization = value,
+            (NodeParams::Analog { morph, .. }, 11) => *morph = value,
+            (NodeParams::Analog { sync_depth, .. }, 12) => *sync_depth = value,
             (NodeParams::Noise { level, .. }, 0) => *level = value,
             (NodeParams::Fm { semitones, .. }, 0) => *semitones = value,
             (NodeParams::Fm { detune, .. }, 1) => *detune = value,

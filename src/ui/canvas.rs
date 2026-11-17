@@ -9,7 +9,9 @@ use crate::engine::filter::FilterKind;
 use crate::engine::graph::{InputSel, ModLink, Patch};
 use crate::engine::lfo::LfoShape;
 use crate::engine::node::{NodeKind, NodeParams, ParamDef};
-use crate::engine::osc::{AnalogShape, NoiseColor, OperatorWave, unison};
+use crate::engine::osc::{
+    AnalogShape, NoiseColor, OperatorWave, OscillatorModel, SyncMode, unison,
+};
 use egui::{Color32, Pos2, Rect, Sense, Shape, Stroke, pos2, vec2};
 use std::sync::OnceLock;
 const ZOOM_MIN: f32 = 0.25;
@@ -21,6 +23,17 @@ const HIT_MOD_SQ: f32 = 64.0;
 const HIT_PORT_SQ: f32 = 121.0;
 
 const VOICE_OPTIONS: [(u8, &str); 5] = [(1, "1"), (2, "2"), (4, "4"), (8, "8"), (16, "16")];
+
+const MODEL_OPTIONS: [(OscillatorModel, &str); 2] = [
+    (OscillatorModel::Discrete, "DISCRETE"),
+    (OscillatorModel::Precision, "PREC"),
+];
+
+const SYNC_OPTIONS: [(SyncMode, &str); 3] = [
+    (SyncMode::Off, "OFF"),
+    (SyncMode::Hard, "HARD"),
+    (SyncMode::Soft, "SOFT"),
+];
 
 const FILTER_LADDER_OPTIONS: [(FilterKind, &str); 6] = [
     (FilterKind::Ladder4LowPass, "LP4"),
@@ -775,26 +788,24 @@ fn kind_controls(
     match params {
         NodeParams::Analog {
             shape,
+            model,
             pulse_width,
             unison_voices,
             unison_stack_mode,
             unison_pan_mode,
             unison_detune_mode,
+            sync_mode,
+            sync_source,
             ..
         } => {
-            *dirty |= knob::glyph_row(
-                ui,
-                "analog_shape",
-                shape,
-                &[
-                    (AnalogShape::Sine, Glyph::Sine),
-                    (AnalogShape::Triangle, Glyph::Tri),
-                    (AnalogShape::Saw, Glyph::Saw),
-                    (AnalogShape::Square, Glyph::Square),
-                ],
-                accent,
-            );
+            *dirty |=
+                shape::wave_shape_picker(ui, "analog_shape", shape, &AnalogShape::ALL, accent);
             preview::preview_analog(ui, BODY_W, accent, *shape, *pulse_width);
+            *dirty |= knob::segmented(ui, "analog_model", model, &MODEL_OPTIONS, accent);
+            *dirty |= knob::segmented(ui, "analog_sync", sync_mode, &SYNC_OPTIONS, accent);
+            if *sync_mode != SyncMode::Off {
+                *dirty |= knob::stepper(ui, "analog_sync_src", sync_source, 0, 15, "SRC", accent);
+            }
             knob::section_label(ui, "UNISON VOICES");
             *dirty |= knob::segmented(ui, "analog_voices", unison_voices, &VOICE_OPTIONS, accent);
             *dirty |= knob::segmented(

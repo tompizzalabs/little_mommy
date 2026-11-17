@@ -50,7 +50,8 @@ impl VectorState {
         let morph_x = self.x_smooth.clamp(0.0, 1.0);
         let morph_y = self.y_smooth.clamp(0.0, 1.0);
 
-        let drift_semitones = self.drift.next(sample_rate) * drift_amount * DRIFT_RANGE_SEMITONES;
+        let (wander, _) = self.drift.next(sample_rate);
+        let drift_semitones = wander * drift_amount * DRIFT_RANGE_SEMITONES;
         let drifted = freq * 2.0f32.powf(drift_semitones / 12.0);
         self.phase += drifted / sample_rate;
         self.phase -= self.phase.floor();

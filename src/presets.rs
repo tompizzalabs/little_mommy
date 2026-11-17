@@ -11,9 +11,11 @@ pub struct Preset {
 fn analog(shape: AnalogShape, semitones: f32, detune: f32, drift: f32) -> NodeParams {
     NodeParams::Analog {
         shape,
+        model: crate::engine::osc::OscillatorModel::Discrete,
         semitones,
         detune,
         pulse_width: 0.5,
+        morph: 0.0,
         drift,
         unison_voices: 1,
         unison_detune: 0.0,
@@ -26,6 +28,9 @@ fn analog(shape: AnalogShape, semitones: f32, detune: f32, drift: f32) -> NodePa
         unison_swarm: 0.0,
         unison_swarm_rate: 0.15,
         unison_phase_randomization: 0.0,
+        sync_mode: crate::engine::osc::SyncMode::Off,
+        sync_source: 0,
+        sync_depth: 0.6,
     }
 }
 
@@ -125,9 +130,11 @@ fn pad_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
             0,
             NodeParams::Analog {
                 shape: AnalogShape::Saw,
+                model: crate::engine::osc::OscillatorModel::Discrete,
                 semitones: 0.0,
                 detune: -7.0,
                 pulse_width: 0.5,
+                morph: 0.0,
                 drift: 0.0,
                 unison_voices: 3,
                 unison_detune: 0.4,
@@ -140,6 +147,9 @@ fn pad_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
                 unison_swarm: 0.25,
                 unison_swarm_rate: 0.15,
                 unison_phase_randomization: 0.0,
+                sync_mode: crate::engine::osc::SyncMode::Off,
+                sync_source: 0,
+                sync_depth: 0.6,
             },
             InputSel::None,
             InputSel::None,
@@ -238,9 +248,9 @@ fn fm_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
                 modulator_wave: OperatorWave::Sine,
                 semitones: 0.0,
                 detune: 0.0,
-                amount: 0.3,
+                amount: 0.5,
                 carrier_ratio: 1,
-                modulator_ratio: 16,
+                modulator_ratio: 12,
                 exponential: true,
                 drift: 0.0,
             },
@@ -251,9 +261,9 @@ fn fm_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
             1,
             NodeParams::Env {
                 attack: 8.0,
-                decay: 300.0,
-                sustain: 0.8,
-                release: 400.0,
+                decay: 450.0,
+                sustain: 0.0,
+                release: 800.0,
             },
             InputSel::Slot(0),
             InputSel::None,

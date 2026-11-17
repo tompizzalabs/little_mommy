@@ -1,8 +1,8 @@
 use crate::engine::dsp::{EnvStage, NodeState, cent_ratio, semitone_ratio};
 use crate::engine::graph::{CompiledGraph, ModLink};
 use crate::engine::node::NodeParams;
-use crate::engine::osc::drift::DriftGenerator;
 use crate::engine::osc::unison::UnisonConfig;
+use crate::engine::osc::{SyncIn, SyncMode, SyncOut};
 use nice_plug::util;
 
 const STEAL_FADE_TIME_MS: f32 = 50.0;
@@ -17,9 +17,9 @@ const UNISON_SEED_MIX: u32 = 0x9E37_79B9;
 const UNISON_NODE_INDEX_MIX: u32 = 0x5BF0_3635;
 const ANALOG_PHASE_SPREAD: u32 = 997;
 const ANALOG_PHASE_VOICE_STEP: u32 = 13;
-const ANALOG_DRIFT_SEED_MIX: u32 = 0xC2B2_AE35;
-const ANALOG_DRIFT_NODE_INDEX_MIX: u32 = 0x27D4_EB2F;
-const ANALOG_DRIFT_VOICE_MIX: u32 = 0x1656_67B1;
+const ANALOG_SEED_MIX: u32 = 0xC2B2_AE35;
+const ANALOG_NODE_INDEX_MIX: u32 = 0x27D4_EB2F;
+const ANALOG_UNISON_MIX: u32 = 0x1656_67B1;
 const VECTOR_SEED_MIX: u32 = 0x6A09_E667;
 const VECTOR_NODE_INDEX_MIX: u32 = 0xBB67_AE85;
 
@@ -85,6 +85,33 @@ fn modulated(params: &NodeParams, links: &[ModLink], mods: &[f32], param_index: 
     params.apply_modulation(param_index, offset)
 }
 
+fn sync_event(
+    master: Option<SyncOut>,
+    mode: SyncMode,
+    depth: f32,
+    slave_threshold: f32,
+) -> Option<SyncIn> {
+    let master = master?;
+    if mode == SyncMode::Off || master.increment <= 1e-12 {
+        return None;
+    }
+    let remaining = 1.0 - master.phase;
+    if remaining > master.increment {
+        return None;
+    }
+    let time = (remaining / master.increment).clamp(1e-6, 1.0);
+    let (depth, threshold) = match mode {
+        SyncMode::Hard => (1.0, 0.0),
+        SyncMode::Soft => (depth.clamp(0.0, 1.0), slave_threshold),
+        SyncMode::Off => return None,
+    };
+    Some(SyncIn {
+        time,
+        depth,
+        threshold,
+    })
+}
+
 impl Voice {
     pub fn new(internal_voice_id: u64, note_number: u8, velocity: f32, num_nodes: usize) -> Self {
         let voice_seed = internal_voice_id as u32;
@@ -129,17 +156,18 @@ impl Voice {
             );
             for (unison_index, analog_voice) in state.analog.iter_mut().enumerate() {
                 let unison_index_seed = unison_index as u32;
-                analog_voice.phase = ((voice_seed
-                    .wrapping_add(node_index_seed)
-                    .wrapping_add(unison_index_seed.wrapping_mul(ANALOG_PHASE_VOICE_STEP))
-                    % ANALOG_PHASE_SPREAD) as f32)
-                    / ANALOG_PHASE_SPREAD as f32;
-                analog_voice.duty_smooth = 0.5;
-                analog_voice.drift = DriftGenerator::new(
+                analog_voice.reseed(
                     voice_seed
-                        .wrapping_mul(ANALOG_DRIFT_SEED_MIX)
-                        .wrapping_add(node_index_seed.wrapping_mul(ANALOG_DRIFT_NODE_INDEX_MIX))
-                        .wrapping_add(unison_index_seed.wrapping_mul(ANALOG_DRIFT_VOICE_MIX)),
+                        .wrapping_mul(ANALOG_SEED_MIX)
+                        .wrapping_add(node_index_seed.wrapping_mul(ANALOG_NODE_INDEX_MIX))
+                        .wrapping_add(unison_index_seed.wrapping_mul(ANALOG_UNISON_MIX)),
+                );
+                analog_voice.set_phase(
+                    ((voice_seed
+                        .wrapping_add(node_index_seed)
+                        .wrapping_add(unison_index_seed.wrapping_mul(ANALOG_PHASE_VOICE_STEP))
+                        % ANALOG_PHASE_SPREAD) as f32)
+                        / ANALOG_PHASE_SPREAD as f32,
                 );
             }
             state.env_stage = EnvStage::Attack;
@@ -213,22 +241,44 @@ impl Voice {
             let second_input_right = node.inputs[1]
                 .map(|source| outputs_r[source as usize])
                 .unwrap_or(0.0);
+            let sync_master = match &node.params {
+                NodeParams::Analog { sync_source, .. } if (*sync_source as usize) < slot => self
+                    .states
+                    .get(*sync_source as usize)
+                    .map(|master_state| master_state.sync_out),
+                _ => None,
+            };
             let state = &mut self.states[slot];
             let links = &node.mod_links;
 
             let (left, right) = match &node.params {
-                NodeParams::Analog { shape, .. } => {
+                NodeParams::Analog {
+                    shape, sync_mode, ..
+                } => {
                     let semitones = modulated(&node.params, links, mod_values, 0);
                     let detune = modulated(&node.params, links, mod_values, 1);
                     let pulse_width = modulated(&node.params, links, mod_values, 2);
                     let drift = modulated(&node.params, links, mod_values, 3);
                     let unison_detune = modulated(&node.params, links, mod_values, 4);
                     let unison_detune_power = modulated(&node.params, links, mod_values, 5);
+                    let morph = modulated(&node.params, links, mod_values, 11);
+                    let sync_depth = modulated(&node.params, links, mod_values, 12);
                     let frequency = base_freq * semitone_ratio(semitones) * cent_ratio(detune);
                     let mut config = unison_config(&node.params);
                     config.detune = unison_detune;
                     config.detune_power = unison_detune_power;
-                    state.analog(*shape, frequency, sample_rate, pulse_width, drift, &config)
+                    let slave_threshold = state.analog[0].soft_sync_threshold();
+                    let sync = sync_event(sync_master, *sync_mode, sync_depth, slave_threshold);
+                    state.analog(
+                        *shape,
+                        frequency,
+                        sample_rate,
+                        pulse_width,
+                        drift,
+                        morph,
+                        &config,
+                        sync,
+                    )
                 }
                 NodeParams::Noise { color, .. } => {
                     let level = modulated(&node.params, links, mod_values, 0);

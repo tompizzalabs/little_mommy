@@ -8,7 +8,7 @@ pub mod one_pole;
 pub mod sem;
 pub mod state_variable;
 
-pub use biquad::{Allpass, DcBlocker, PeakingEq, Resonator};
+pub use biquad::{Allpass, Biquad, DcBlocker, PeakingEq, Resonator};
 pub use comb::CombFilter;
 pub use diode::DiodeFilter;
 pub use formant::{FormantFilter, Vowel};

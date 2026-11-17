@@ -73,7 +73,8 @@ impl OperatorVoice {
             return (freq, self.phase);
         }
 
-        let drift_semitones = self.drift.next(sample_rate) * drift_amount * DRIFT_RANGE_SEMITONES;
+        let (wander, _) = self.drift.next(sample_rate);
+        let drift_semitones = wander * drift_amount * DRIFT_RANGE_SEMITONES;
         let drifted = freq * 2.0f32.powf(drift_semitones / 12.0);
 
         self.phase += drifted / sample_rate;
