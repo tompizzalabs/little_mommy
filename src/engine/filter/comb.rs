@@ -23,11 +23,17 @@ impl Default for CombFilter {
 impl CombFilter {
     pub fn new() -> Self {
         Self {
-            buffer: vec![0.0; BUFFER_LENGTH],
+            buffer: Vec::new(),
             write_index: 0,
             delay_time_control: 1.0 / 2000.0,
             delay_time_smooth: 1.0 / 2000.0,
             dc_blocker: DcBlocker::default(),
+        }
+    }
+
+    fn ensure_buffer(&mut self) {
+        if self.buffer.len() != BUFFER_LENGTH {
+            self.buffer = vec![0.0; BUFFER_LENGTH];
         }
     }
 
@@ -42,6 +48,7 @@ impl CombFilter {
         if sample_rate <= 0.0 {
             return 0.0;
         }
+        self.ensure_buffer();
         self.dc_blocker.set_sample_rate(sample_rate);
 
         self.delay_time_control = 1.0 / frequency.max(FREQUENCY_MIN);

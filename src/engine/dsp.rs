@@ -3,8 +3,8 @@ use crate::engine::effects::{
     PhaserState, RingModState, ZitaReverbState,
 };
 use crate::engine::filter::{
-    CombFilter, DiodeFilter, FormantFilter, Korg35Filter, LadderFilter, PeakingEq, SemFilter,
-    StateVariableFilter,
+    CombFilter, DiodeFilter, FilterKind, FormantFilter, Korg35Filter, LadderFilter, LadderMode,
+    PeakingEq, SemFilter, StateVariableFilter,
 };
 use crate::engine::{
     lfo::{LfoShape, LfoState},
@@ -36,12 +36,12 @@ pub struct NodeState {
     pub fm: FmState,
     pub pm: PmState,
     pub vector: VectorState,
-    pub ladder: LadderFilter,
-    pub sem: SemFilter,
-    pub korg35: Korg35Filter,
-    pub diode: DiodeFilter,
-    pub formant: FormantFilter,
-    pub comb: CombFilter,
+    pub ladder: [LadderFilter; 2],
+    pub sem: [SemFilter; 2],
+    pub korg35: [Korg35Filter; 2],
+    pub diode: [DiodeFilter; 2],
+    pub formant: [FormantFilter; 2],
+    pub comb: [CombFilter; 2],
     pub state_variable: StateVariableFilter,
     pub delay: DelayState,
     pub chorus: [ChorusState; 2],
@@ -66,12 +66,12 @@ impl Default for NodeState {
             fm: FmState::default(),
             pm: PmState::default(),
             vector: VectorState::default(),
-            ladder: LadderFilter::default(),
-            sem: SemFilter::default(),
-            korg35: Korg35Filter::default(),
-            diode: DiodeFilter::default(),
-            formant: FormantFilter::default(),
-            comb: CombFilter::default(),
+            ladder: std::array::from_fn(|_| LadderFilter::default()),
+            sem: std::array::from_fn(|_| SemFilter::default()),
+            korg35: std::array::from_fn(|_| Korg35Filter::default()),
+            diode: std::array::from_fn(|_| DiodeFilter::default()),
+            formant: std::array::from_fn(|_| FormantFilter::default()),
+            comb: std::array::from_fn(|_| CombFilter::default()),
             state_variable: StateVariableFilter::default(),
             delay: DelayState::default(),
             chorus: std::array::from_fn(|_| ChorusState::default()),
@@ -133,7 +133,7 @@ impl NodeState {
     #[allow(clippy::too_many_arguments)]
     pub fn filter(
         &mut self,
-        kind: crate::engine::filter::FilterKind,
+        kind: FilterKind,
         input_left: f32,
         input_right: f32,
         cutoff: f32,
@@ -144,101 +144,116 @@ impl NodeState {
         saturation: f32,
         sample_rate: f32,
     ) -> (f32, f32) {
-        use crate::engine::filter::{FilterKind, LadderMode};
-
         match kind {
-            FilterKind::Ladder4LowPass => {
-                self.ladder.set_mode(LadderMode::LowPass4);
-                self.ladder.set_saturation(saturation);
-                let mono = self
-                    .ladder
-                    .process(input_left, cutoff, resonance, sample_rate);
-                (mono, mono)
-            }
-            FilterKind::Ladder2LowPass => {
-                self.ladder.set_mode(LadderMode::LowPass2);
-                self.ladder.set_saturation(saturation);
-                let mono = self
-                    .ladder
-                    .process(input_left, cutoff, resonance, sample_rate);
-                (mono, mono)
-            }
-            FilterKind::Ladder4BandPass => {
-                self.ladder.set_mode(LadderMode::BandPass4);
-                self.ladder.set_saturation(saturation);
-                let mono = self
-                    .ladder
-                    .process(input_left, cutoff, resonance, sample_rate);
-                (mono, mono)
-            }
-            FilterKind::Ladder2BandPass => {
-                self.ladder.set_mode(LadderMode::BandPass2);
-                self.ladder.set_saturation(saturation);
-                let mono = self
-                    .ladder
-                    .process(input_left, cutoff, resonance, sample_rate);
-                (mono, mono)
-            }
-            FilterKind::Ladder4HighPass => {
-                self.ladder.set_mode(LadderMode::HighPass4);
-                self.ladder.set_saturation(saturation);
-                let mono = self
-                    .ladder
-                    .process(input_left, cutoff, resonance, sample_rate);
-                (mono, mono)
-            }
-            FilterKind::Ladder2HighPass => {
-                self.ladder.set_mode(LadderMode::HighPass2);
-                self.ladder.set_saturation(saturation);
-                let mono = self
-                    .ladder
-                    .process(input_left, cutoff, resonance, sample_rate);
-                (mono, mono)
-            }
+            FilterKind::Ladder4LowPass => self.process_ladder(
+                LadderMode::LowPass4,
+                input_left,
+                input_right,
+                cutoff,
+                resonance,
+                saturation,
+                sample_rate,
+            ),
+            FilterKind::Ladder2LowPass => self.process_ladder(
+                LadderMode::LowPass2,
+                input_left,
+                input_right,
+                cutoff,
+                resonance,
+                saturation,
+                sample_rate,
+            ),
+            FilterKind::Ladder4BandPass => self.process_ladder(
+                LadderMode::BandPass4,
+                input_left,
+                input_right,
+                cutoff,
+                resonance,
+                saturation,
+                sample_rate,
+            ),
+            FilterKind::Ladder2BandPass => self.process_ladder(
+                LadderMode::BandPass2,
+                input_left,
+                input_right,
+                cutoff,
+                resonance,
+                saturation,
+                sample_rate,
+            ),
+            FilterKind::Ladder4HighPass => self.process_ladder(
+                LadderMode::HighPass4,
+                input_left,
+                input_right,
+                cutoff,
+                resonance,
+                saturation,
+                sample_rate,
+            ),
+            FilterKind::Ladder2HighPass => self.process_ladder(
+                LadderMode::HighPass2,
+                input_left,
+                input_right,
+                cutoff,
+                resonance,
+                saturation,
+                sample_rate,
+            ),
             FilterKind::Sem => {
-                let mono = self
-                    .sem
-                    .process(input_left, cutoff, resonance, transition, sample_rate);
-                (mono, mono)
+                let left =
+                    self.sem[0].process(input_left, cutoff, resonance, transition, sample_rate);
+                let right =
+                    self.sem[1].process(input_right, cutoff, resonance, transition, sample_rate);
+                (left, right)
             }
-            FilterKind::Korg35LowPass => {
-                self.korg35.set_lowpass();
-                self.korg35.set_saturation(saturation);
-                let mono = self
-                    .korg35
-                    .process(input_left, cutoff, resonance, sample_rate);
-                (mono, mono)
-            }
-            FilterKind::Korg35HighPass => {
-                self.korg35.set_highpass();
-                self.korg35.set_saturation(saturation);
-                let mono = self
-                    .korg35
-                    .process(input_left, cutoff, resonance, sample_rate);
-                (mono, mono)
-            }
+            FilterKind::Korg35LowPass => self.process_korg35(
+                true,
+                input_left,
+                input_right,
+                cutoff,
+                resonance,
+                saturation,
+                sample_rate,
+            ),
+            FilterKind::Korg35HighPass => self.process_korg35(
+                false,
+                input_left,
+                input_right,
+                cutoff,
+                resonance,
+                saturation,
+                sample_rate,
+            ),
             FilterKind::Diode => {
-                self.diode.set_saturation(saturation);
-                let mono = self
-                    .diode
-                    .process(input_left, cutoff, resonance, sample_rate);
-                (mono, mono)
+                for filter in self.diode.iter_mut() {
+                    filter.set_saturation(saturation);
+                }
+                let left = self.diode[0].process(input_left, cutoff, resonance, sample_rate);
+                let right = self.diode[1].process(input_right, cutoff, resonance, sample_rate);
+                (left, right)
             }
             FilterKind::Formant => {
-                let mono = self.formant.process(
+                let transition = transition.clamp(0.0, 1.0);
+                let left = self.formant[0].process(
                     input_left,
-                    transition.clamp(0.0, 1.0),
+                    transition,
                     vowel_left,
                     vowel_right,
                     sample_rate,
                 );
-                (mono, mono)
+                let right = self.formant[1].process(
+                    input_right,
+                    transition,
+                    vowel_left,
+                    vowel_right,
+                    sample_rate,
+                );
+                (left, right)
             }
             FilterKind::Comb => {
-                let mono = self
-                    .comb
-                    .process(input_left, cutoff, resonance, sample_rate);
-                (mono, mono)
+                let left = self.comb[0].process(input_left, cutoff, resonance, sample_rate);
+                let right = self.comb[1].process(input_right, cutoff, resonance, sample_rate);
+                (left, right)
             }
             FilterKind::StateVariable => self.state_variable.process_stereo(
                 input_left,
@@ -248,6 +263,50 @@ impl NodeState {
                 sample_rate,
             ),
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn process_ladder(
+        &mut self,
+        mode: LadderMode,
+        input_left: f32,
+        input_right: f32,
+        cutoff: f32,
+        resonance: f32,
+        saturation: f32,
+        sample_rate: f32,
+    ) -> (f32, f32) {
+        for filter in self.ladder.iter_mut() {
+            filter.set_mode(mode);
+            filter.set_saturation(saturation);
+        }
+        let left = self.ladder[0].process(input_left, cutoff, resonance, sample_rate);
+        let right = self.ladder[1].process(input_right, cutoff, resonance, sample_rate);
+        (left, right)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn process_korg35(
+        &mut self,
+        lowpass: bool,
+        input_left: f32,
+        input_right: f32,
+        cutoff: f32,
+        resonance: f32,
+        saturation: f32,
+        sample_rate: f32,
+    ) -> (f32, f32) {
+        for filter in self.korg35.iter_mut() {
+            if lowpass {
+                filter.set_lowpass();
+            } else {
+                filter.set_highpass();
+            }
+            filter.set_saturation(saturation);
+        }
+        let left = self.korg35[0].process(input_left, cutoff, resonance, sample_rate);
+        let right = self.korg35[1].process(input_right, cutoff, resonance, sample_rate);
+        (left, right)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -536,4 +595,44 @@ pub fn env_coeff(time_ms: f32, sample_rate: f32) -> f32 {
 
     let frames = (time_ms * 0.001 * sample_rate).max(1.0);
     1.0 - (-1.0 / frames).exp()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SAMPLE_RATE: f32 = 48_000.0;
+
+    #[test]
+    fn mono_filters_preserve_channel_differences() {
+        for kind in crate::engine::filter::FilterKind::ALL {
+            let mut state = NodeState::default();
+            let mut output_difference: f32 = 0.0;
+            for step in 0..1_000 {
+                let input_left = (step as f32 * 0.01).sin() * 0.5;
+                let input_right = (step as f32 * 0.01 + 1.5).sin() * 0.5;
+                let (left, right) = state.filter(
+                    kind,
+                    input_left,
+                    input_right,
+                    4_000.0,
+                    0.2,
+                    0.5,
+                    0,
+                    1,
+                    0.0,
+                    SAMPLE_RATE,
+                );
+                assert!(
+                    left.is_finite() && right.is_finite(),
+                    "{kind} must stay finite"
+                );
+                output_difference = output_difference.max((left - right).abs());
+            }
+            assert!(
+                output_difference > 1e-4,
+                "{kind} collapsed stereo to dual mono (max channel difference {output_difference})"
+            );
+        }
+    }
 }
