@@ -1,38 +1,17 @@
 # Little Mommy III
 
 **Modular Node-Based Analog Synthesizer**
-<img width="1040" height="660" alt="image" src="https://github.com/user-attachments/assets/ba8cbceb-7342-493d-94c6-b7bf46bf80ce" />
-
+<img width="1704" height="831" alt="image" src="https://github.com/user-attachments/assets/b9aaca86-6f1e-40ba-931e-22cbe9ac75e0" />
 
 # WARNING
 If you make **Big Daddy V** in response to this synth,
 I'll break your ribs and ass bone ( not a threat )
 
-## Feature status
-
-### Oscillators
-
-Analog - very simple, does their job nicely but they can have a BIG upgrade
-
-FM - Does the job nicely, but needs serious upgrades too
-
-PM - Potential for some crazy, but you gotta tinker..
-
-### Presets
-There are no reading and writing presets, at the moment presets we have are just hardcoded, preset part 
-
-First we want to focus on stabilizing the generation enginethere are still a lot of upgrades and expansions to be made
-
-So making preset stuff for now is not feasible, they will break too often
-
-
 ## Vision
 
-Node based Synthesizer, intuitive to use
+Analog Monster, that can let you do absolut crazy shiii
 
 ( To people who never used nodes they might seem intimidating, but they're actually not! )
-
-Several Oscillator types -  Noise, Analog, Wavetable, FM, Chiptune
 
 Would be amazing to also have sampler and granular stuff 
 
