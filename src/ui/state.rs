@@ -77,6 +77,24 @@ pub fn ensure_scratch(patch: &Patch, positions: &mut Vec<egui::Pos2>, geom: &mut
     }
 }
 
+pub fn apply_patch(
+    patch: &mut Patch,
+    positions: &mut Vec<egui::Pos2>,
+    selected: &mut Option<usize>,
+    scene_rect: &mut egui::Rect,
+    replacement: Patch,
+) {
+    let cell_count = replacement.grid.cells.len();
+    *patch = replacement;
+    patch.version = patch.version.wrapping_add(1);
+    *selected = None;
+    if positions.len() < cell_count {
+        positions.resize(cell_count, egui::Pos2::ZERO);
+    }
+    auto_layout(patch, positions);
+    *scene_rect = content_bbox(patch, positions);
+}
+
 pub fn content_bbox(patch: &Patch, positions: &[egui::Pos2]) -> egui::Rect {
     let mut union_bounds = egui::Rect::NOTHING;
     let mut has_content = false;

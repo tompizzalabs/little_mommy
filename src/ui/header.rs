@@ -1,12 +1,105 @@
 use super::knob::Knob;
-use super::state::{auto_layout, content_bbox};
+use super::state::apply_patch;
 use super::theme as th;
-use crate::engine::graph::{Grid, Patch, PlayMode};
+use crate::engine::graph::{Patch, PlayMode};
 use crate::params::LittleMommyParams;
+use crate::preset_bank::{self, PresetEntry, PresetOrigin};
 use crate::presets;
 use nice_plug::context::gui::ParamSetter;
 use nice_plug::prelude::Param;
 use std::sync::Arc;
+
+pub struct HeaderState {
+    pub listing: Vec<PresetEntry>,
+    pub listing_valid: bool,
+    pub current: Option<PresetEntry>,
+    pub browser_open: bool,
+    pub browser_category: Option<(PresetOrigin, String)>,
+    pub save_open: bool,
+    pub save_name: String,
+    pub save_category: String,
+    pub save_author: String,
+    pub save_status: Option<String>,
+}
+
+impl Default for HeaderState {
+    fn default() -> Self {
+        Self {
+            listing: Vec::new(),
+            listing_valid: false,
+            current: None,
+            browser_open: false,
+            browser_category: None,
+            save_open: false,
+            save_name: String::new(),
+            save_category: String::new(),
+            save_author: String::new(),
+            save_status: None,
+        }
+    }
+}
+
+impl HeaderState {
+    fn rescan(&mut self) {
+        self.listing = preset_bank::scan();
+        self.listing_valid = true;
+    }
+
+    fn ensure_listing(&mut self) {
+        if !self.listing_valid {
+            self.rescan();
+        }
+    }
+
+    fn current_index(&self) -> Option<usize> {
+        let current = self.current.as_ref()?;
+        self.listing
+            .iter()
+            .position(|entry| entry.path == current.path)
+    }
+
+    fn load_entry(
+        &mut self,
+        entry: &PresetEntry,
+        patch: &mut Patch,
+        positions: &mut Vec<egui::Pos2>,
+        selected: &mut Option<usize>,
+        scene_rect: &mut egui::Rect,
+    ) {
+        match preset_bank::load_preset(&entry.path) {
+            Ok(file) => {
+                apply_patch(patch, positions, selected, scene_rect, file.patch);
+                self.current = Some(entry.clone());
+                self.save_status = None;
+            }
+            Err(error) => {
+                self.save_status = Some(format!("Load failed: {error}"));
+            }
+        }
+    }
+
+    fn step(
+        &mut self,
+        direction: i32,
+        patch: &mut Patch,
+        positions: &mut Vec<egui::Pos2>,
+        selected: &mut Option<usize>,
+        scene_rect: &mut egui::Rect,
+    ) {
+        self.ensure_listing();
+        if self.listing.is_empty() {
+            return;
+        }
+        let count = self.listing.len() as i32;
+        let index = self
+            .current_index()
+            .map_or(if direction < 0 { count - 1 } else { 0 }, |index| {
+                (index as i32 + direction).rem_euclid(count)
+            });
+        let entry = self.listing[index as usize].clone();
+        self.load_entry(&entry, patch, positions, selected, scene_rect);
+    }
+}
 
 #[allow(clippy::too_many_arguments)]
 pub fn top_bar(
@@ -14,7 +107,7 @@ pub fn top_bar(
     patch: &mut Patch,
     positions: &mut Vec<egui::Pos2>,
     scene_rect: &mut egui::Rect,
-    preset_index: &mut usize,
+    header_state: &mut HeaderState,
     selected: &mut Option<usize>,
     params: &Arc<LittleMommyParams>,
     setter: &ParamSetter,
@@ -53,33 +146,59 @@ pub fn top_bar(
     );
     child.add_space(6.0);
 
-    let presets = presets::factory_presets();
-    let mut preset_changed = false;
-    egui::ComboBox::from_id_salt("preset_pick")
-        .selected_text(presets[*preset_index].name)
-        .width(160.0)
-        .height(300.0)
-        .show_ui(&mut child, |ui| {
-            for (candidate_index, preset) in presets.iter().enumerate() {
-                preset_changed |= ui
-                    .selectable_value(preset_index, candidate_index, preset.name)
-                    .changed();
-            }
-        });
-    if preset_changed {
-        let preset = &presets[*preset_index];
-        patch.grid = Grid::new();
-        for (slot, params, in0, in1) in preset.cells.iter() {
-            patch.grid.set(*slot, Some(params.clone()), *in0, *in1);
+    if child.button("<").clicked() {
+        header_state.step(-1, patch, positions, selected, scene_rect);
+    }
+    let current_name = header_state
+        .current
+        .as_ref()
+        .map(|entry| entry.name.clone())
+        .unwrap_or_else(|| "Init".to_owned());
+    child.add_sized(
+        egui::vec2(150.0, 18.0),
+        egui::Label::new(
+            egui::RichText::new(current_name)
+                .size(12.0)
+                .strong()
+                .color(th::TEXT_BRIGHT),
+        ),
+    );
+    if child.button(">").clicked() {
+        header_state.step(1, patch, positions, selected, scene_rect);
+    }
+    child.add_space(4.0);
+    if child.button("INIT").clicked() {
+        apply_patch(
+            patch,
+            positions,
+            selected,
+            scene_rect,
+            presets::default_patch(),
+        );
+        header_state.current = None;
+        header_state.save_status = None;
+    }
+    if child.button("SAVE").clicked() {
+        header_state.browser_open = false;
+        if header_state.save_name.is_empty() {
+            header_state.save_name = header_state
+                .current
+                .as_ref()
+                .map_or_else(String::new, |entry| entry.name.clone());
         }
-        patch.play_mode = preset.play_mode;
-        patch.version = patch.version.wrapping_add(1);
-        *selected = None;
-        if positions.len() < patch.grid.cells.len() {
-            positions.resize(patch.grid.cells.len(), egui::Pos2::ZERO);
+        if header_state.save_category.is_empty() {
+            header_state.save_category = header_state
+                .current
+                .as_ref()
+                .map_or_else(|| "Misc".to_owned(), |entry| entry.category.clone());
         }
-        auto_layout(patch, positions);
-        *scene_rect = content_bbox(patch, positions);
+        header_state.save_status = None;
+        header_state.save_open = true;
+    }
+    if child.button("BROWSE").clicked() {
+        header_state.save_open = false;
+        header_state.ensure_listing();
+        header_state.browser_open = true;
     }
 
     let mut selected_mode = patch.play_mode;
@@ -136,4 +255,169 @@ pub fn top_bar(
             egui::Stroke::new(1.0, th::INSET_EDGE),
         );
     });
+}
+
+pub fn browser_window(
+    ui: &mut egui::Ui,
+    patch: &mut Patch,
+    positions: &mut Vec<egui::Pos2>,
+    selected: &mut Option<usize>,
+    scene_rect: &mut egui::Rect,
+    state: &mut HeaderState,
+) {
+    if !state.browser_open {
+        return;
+    }
+    let mut open = state.browser_open;
+    egui::Window::new("PRESET BROWSER")
+        .open(&mut open)
+        .default_width(480.0)
+        .default_height(360.0)
+        .show(ui, |ui| {
+            state.ensure_listing();
+            ui.horizontal(|ui| {
+                egui::ScrollArea::vertical()
+                    .id_salt("preset_categories")
+                    .max_width(160.0)
+                    .show(ui, |ui| {
+                        for origin in [PresetOrigin::Community, PresetOrigin::User] {
+                            ui.label(
+                                egui::RichText::new(origin.label().to_uppercase())
+                                    .size(10.0)
+                                    .strong()
+                                    .color(th::CV),
+                            );
+                            for category in categories_of(state, origin) {
+                                let is_selected =
+                                    state.browser_category.as_ref().is_some_and(|selected| {
+                                        *selected == (origin, category.clone())
+                                    });
+                                if ui.selectable_label(is_selected, &category).clicked() {
+                                    state.browser_category = Some((origin, category));
+                                }
+                            }
+                            ui.add_space(6.0);
+                        }
+                        if ui.button("REFRESH").clicked() {
+                            state.rescan();
+                        }
+                    });
+                ui.separator();
+                egui::ScrollArea::vertical()
+                    .id_salt("preset_list")
+                    .show(ui, |ui| {
+                        let entries: Vec<PresetEntry> =
+                            entries_in(state).into_iter().cloned().collect();
+                        for entry in entries {
+                            let entry = entry.clone();
+                            let author = if entry.author.is_empty() {
+                                String::from("-")
+                            } else {
+                                entry.author.clone()
+                            };
+                            let is_current = state
+                                .current
+                                .as_ref()
+                                .is_some_and(|current| current.path == entry.path);
+                            if ui
+                                .selectable_label(
+                                    is_current,
+                                    format!("{}  -  {}", entry.name, author),
+                                )
+                                .clicked()
+                            {
+                                state.load_entry(&entry, patch, positions, selected, scene_rect);
+                            }
+                        }
+                    });
+            });
+        });
+    state.browser_open = open;
+}
+
+fn categories_of(state: &HeaderState, origin: PresetOrigin) -> Vec<String> {
+    let mut categories: Vec<String> = Vec::new();
+    for entry in &state.listing {
+        if entry.origin == origin && !categories.contains(&entry.category) {
+            categories.push(entry.category.clone());
+        }
+    }
+    categories
+}
+
+fn entries_in(state: &HeaderState) -> Vec<&PresetEntry> {
+    state
+        .listing
+        .iter()
+        .filter(|entry| match &state.browser_category {
+            Some((origin, category)) => entry.origin == *origin && &entry.category == category,
+            None => true,
+        })
+        .collect()
+}
+
+pub fn save_window(ui: &mut egui::Ui, patch: &mut Patch, state: &mut HeaderState) {
+    if !state.save_open {
+        return;
+    }
+    let mut open = state.save_open;
+    egui::Window::new("SAVE PRESET")
+        .open(&mut open)
+        .default_width(340.0)
+        .show(ui, |ui| {
+            egui::Grid::new("save_fields")
+                .num_columns(2)
+                .spacing(egui::vec2(8.0, 6.0))
+                .show(ui, |ui| {
+                    ui.label(egui::RichText::new("NAME").size(10.0).color(th::TEXT_DIM));
+                    ui.text_edit_singleline(&mut state.save_name);
+                    ui.end_row();
+                    ui.label(
+                        egui::RichText::new("CATEGORY")
+                            .size(10.0)
+                            .color(th::TEXT_DIM),
+                    );
+                    ui.text_edit_singleline(&mut state.save_category);
+                    ui.end_row();
+                    ui.label(egui::RichText::new("AUTHOR").size(10.0).color(th::TEXT_DIM));
+                    ui.text_edit_singleline(&mut state.save_author);
+                    ui.end_row();
+                });
+            ui.add_space(4.0);
+            if ui.button("SAVE TO USER PRESETS").clicked() {
+                perform_save(patch, state);
+            }
+            if let Some(status) = &state.save_status {
+                ui.label(egui::RichText::new(status).size(10.0).color(th::CV));
+            }
+        });
+    state.save_open = open;
+}
+
+fn perform_save(patch: &mut Patch, state: &mut HeaderState) {
+    match preset_bank::preset_root() {
+        Some(root) => {
+            match preset_bank::save_preset(
+                &root,
+                &state.save_category,
+                &state.save_name,
+                &state.save_author,
+                patch,
+            ) {
+                Ok(path) => {
+                    state.rescan();
+                    state.current = state
+                        .listing
+                        .iter()
+                        .find(|entry| entry.path == path)
+                        .cloned();
+                    state.save_status = Some("Saved".to_owned());
+                }
+                Err(error) => state.save_status = Some(format!("Save failed: {error}")),
+            }
+        }
+        None => {
+            state.save_status = Some("Preset folder unavailable on this platform".to_owned());
+        }
+    }
 }

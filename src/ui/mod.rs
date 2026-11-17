@@ -116,7 +116,7 @@ pub struct LittleMommyEditor {
     geom: Vec<NodeGeom>,
     selected: Option<usize>,
     drag: DragState,
-    preset_index: usize,
+    header_state: header::HeaderState,
     scene_rect: egui::Rect,
     context_menu_pos: Option<egui::Pos2>,
     context_menu_world: Option<egui::Pos2>,
@@ -140,7 +140,7 @@ impl LittleMommyEditor {
             geom,
             selected: None,
             drag: DragState::None,
-            preset_index: 0,
+            header_state: header::HeaderState::default(),
             scene_rect,
             context_menu_pos: None,
             context_menu_world: None,
@@ -157,6 +157,7 @@ impl NiceEguiApp for LittleMommyEditor {
     ) -> Result<(), nice_plug_egui::baseview::HandlerError> {
         install_fonts(&egui_ctx);
         apply_theme(&egui_ctx);
+        let _ = crate::preset_bank::install_community_presets();
         self.open_state = Some(OpenEditorState::new(nice_gui_ctx));
         Ok(())
     }
@@ -192,7 +193,7 @@ impl NiceEguiApp for LittleMommyEditor {
                         &mut patch,
                         &mut self.positions,
                         &mut self.scene_rect,
-                        &mut self.preset_index,
+                        &mut self.header_state,
                         &mut self.selected,
                         params,
                         &setter,
@@ -210,6 +211,15 @@ impl NiceEguiApp for LittleMommyEditor {
                     );
                 });
             });
+        header::browser_window(
+            ui,
+            &mut patch,
+            &mut self.positions,
+            &mut self.selected,
+            &mut self.scene_rect,
+            &mut self.header_state,
+        );
+        header::save_window(ui, &mut patch, &mut self.header_state);
     }
 }
 

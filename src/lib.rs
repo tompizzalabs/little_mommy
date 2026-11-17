@@ -1,5 +1,6 @@
 pub mod engine;
 pub mod params;
+pub mod preset_bank;
 pub mod presets;
 pub mod ui;
 pub mod voice;

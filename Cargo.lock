@@ -1000,6 +1000,7 @@ dependencies = [
  "nice-plug",
  "nice-plug-egui",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
