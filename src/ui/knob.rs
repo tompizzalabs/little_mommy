@@ -15,6 +15,7 @@ pub struct Knob<'a> {
     label: &'a str,
     default: Option<f32>,
     bipolar: bool,
+    log_scale: bool,
     depth: Option<&'a mut f32>,
     formatter: Option<fn(f32) -> String>,
 }
@@ -30,9 +31,15 @@ impl<'a> Knob<'a> {
             label: "",
             default: None,
             bipolar: min < 0.0 && max > 0.0,
+            log_scale: false,
             depth: None,
             formatter: None,
         }
+    }
+
+    pub fn log(mut self) -> Self {
+        self.log_scale = self.min > 0.0;
+        self
     }
 
     pub fn accent(mut self, c: Color32) -> Self {
@@ -55,6 +62,10 @@ impl<'a> Knob<'a> {
         self.bipolar = b;
         self
     }
+    pub fn formatter(mut self, formatter: fn(f32) -> String) -> Self {
+        self.formatter = Some(formatter);
+        self
+    }
     pub fn depth(mut self, d: Option<&'a mut f32>) -> Self {
         self.depth = Some(d).flatten();
         self
@@ -66,27 +77,43 @@ impl<'a> Knob<'a> {
         let height = self.size + 24.0 + if has_depth { 9.0 } else { 0.0 };
         let (rect, mut resp) = ui.allocate_exact_size(vec2(width, height), Sense::click_and_drag());
         let span = (self.max - self.min).max(1e-9);
-        let mut value = *self.value;
+        let log_span = (self.max / self.min).max(1.000_1);
+        let value_to_normalized = |value: f32| {
+            if self.log_scale {
+                (value.max(self.min) / self.min)
+                    .log(log_span)
+                    .clamp(0.0, 1.0)
+            } else {
+                ((value - self.min) / span).clamp(0.0, 1.0)
+            }
+        };
+        let normalized_to_value = |normalized: f32| {
+            if self.log_scale {
+                self.min * log_span.powf(normalized)
+            } else {
+                self.min + normalized * span
+            }
+        };
+        let mut normalized = value_to_normalized(*self.value);
 
         if resp.dragged() {
             let (pointer_delta, fine_mode) =
                 ui.input(|input| (input.pointer.delta(), input.modifiers.shift));
             let speed = if fine_mode { 0.16 } else { 1.0 };
             let movement = (-pointer_delta.y + pointer_delta.x) * speed / 190.0;
-            value = (value + movement * span).clamp(self.min, self.max);
+            normalized = (normalized + movement).clamp(0.0, 1.0);
         }
         if resp.double_clicked()
             && let Some(default_value) = self.default
         {
-            value = default_value.clamp(self.min, self.max);
+            normalized = value_to_normalized(default_value);
         }
+        let value = normalized_to_value(normalized);
         let changed = (value - *self.value).abs() > f32::EPSILON;
         if changed {
             *self.value = value;
             resp.mark_changed();
         }
-
-        let normalized = ((value - self.min) / span).clamp(0.0, 1.0);
         let radius = self.size * 0.5;
         let center = pos2(rect.left() + 12.0 + radius, rect.top() + radius);
         let linked = has_depth;

@@ -105,11 +105,18 @@ const ANALOG_DEFS: &[ParamDef] = &[
         max: 1.0,
     },
 ];
-const NOISE_DEFS: &[ParamDef] = &[ParamDef {
-    name: "Level",
-    min: 0.0,
-    max: 1.0,
-}];
+const NOISE_DEFS: &[ParamDef] = &[
+    ParamDef {
+        name: "Level",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Rate",
+        min: 0.02,
+        max: 20_000.0,
+    },
+];
 const FM_DEFS: &[ParamDef] = &[
     ParamDef {
         name: "Semi",
@@ -222,8 +229,8 @@ const GAIN_DEFS: &[ParamDef] = &[ParamDef {
 const LFO_DEFS: &[ParamDef] = &[
     ParamDef {
         name: "Rate",
-        min: 0.01,
-        max: 20.0,
+        min: 0.05,
+        max: 100.0,
     },
     ParamDef {
         name: "Phase",
@@ -449,6 +456,7 @@ pub enum NodeParams {
     Noise {
         color: NoiseColor,
         level: f32,
+        frequency: f32,
     },
     Fm {
         carrier_wave: OperatorWave,
@@ -599,6 +607,7 @@ impl NodeParams {
                 ModSpan::Semitones(36.0)
             }
             (NodeKind::Lfo, 0) => ModSpan::Semitones(48.0),
+            (NodeKind::Noise, 1) => ModSpan::Semitones(48.0),
             (NodeKind::Delay, 0) => ModSpan::Linear(1.0),
             (NodeKind::Phaser, 0) => ModSpan::Semitones(24.0),
             (NodeKind::Phaser, 1) => ModSpan::Linear(2000.0),
@@ -645,6 +654,7 @@ impl NodeParams {
             NodeKind::Noise => NodeParams::Noise {
                 color: NoiseColor::White,
                 level: 0.2,
+                frequency: 20_000.0,
             },
             NodeKind::Fm => NodeParams::Fm {
                 carrier_wave: OperatorWave::Sine,
@@ -887,6 +897,7 @@ impl NodeParams {
             (NodeParams::Analog { morph, .. }, 11) => *morph,
             (NodeParams::Analog { sync_depth, .. }, 12) => *sync_depth,
             (NodeParams::Noise { level, .. }, 0) => *level,
+            (NodeParams::Noise { frequency, .. }, 1) => *frequency,
             (NodeParams::Fm { semitones, .. }, 0) => *semitones,
             (NodeParams::Fm { detune, .. }, 1) => *detune,
             (NodeParams::Fm { amount, .. }, 2) => *amount,
@@ -984,6 +995,7 @@ impl NodeParams {
             (NodeParams::Analog { morph, .. }, 11) => *morph = value,
             (NodeParams::Analog { sync_depth, .. }, 12) => *sync_depth = value,
             (NodeParams::Noise { level, .. }, 0) => *level = value,
+            (NodeParams::Noise { frequency, .. }, 1) => *frequency = value,
             (NodeParams::Fm { semitones, .. }, 0) => *semitones = value,
             (NodeParams::Fm { detune, .. }, 1) => *detune = value,
             (NodeParams::Fm { amount, .. }, 2) => *amount = value,

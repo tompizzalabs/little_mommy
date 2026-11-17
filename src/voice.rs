@@ -282,7 +282,8 @@ impl Voice {
                 }
                 NodeParams::Noise { color, .. } => {
                     let level = modulated(&node.params, links, mod_values, 0);
-                    let (noise_left, noise_right) = state.noise(*color);
+                    let rate = modulated(&node.params, links, mod_values, 1);
+                    let (noise_left, noise_right) = state.noise(*color, rate, sample_rate);
                     (noise_left * level, noise_right * level)
                 }
                 NodeParams::Fm { .. } => {

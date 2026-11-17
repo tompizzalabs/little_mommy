@@ -182,6 +182,7 @@ fn pluck_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
             NodeParams::Noise {
                 color: NoiseColor::Pink,
                 level: 0.3,
+                frequency: 20_000.0,
             },
             InputSel::None,
             InputSel::None,
@@ -534,6 +535,7 @@ fn miami_mist_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
             NodeParams::Noise {
                 color: NoiseColor::Pink,
                 level: 0.12,
+                frequency: 20_000.0,
             },
             InputSel::None,
             InputSel::None,

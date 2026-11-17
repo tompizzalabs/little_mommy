@@ -138,8 +138,8 @@ impl NodeState {
         }
     }
 
-    pub fn noise(&mut self, color: NoiseColor) -> (f32, f32) {
-        let mono = self.noise.sample(color);
+    pub fn noise(&mut self, color: NoiseColor, frequency: f32, sample_rate: f32) -> (f32, f32) {
+        let mono = self.noise.sample(color, frequency, sample_rate);
         (mono, mono)
     }
 

@@ -722,6 +722,20 @@ fn center_detented(name: &str) -> bool {
         .iter()
         .any(|keyword| lowercase_name.contains(keyword))
 }
+
+fn is_rate(name: &str) -> bool {
+    name == "Rate"
+}
+
+fn hz_text(value: f32) -> String {
+    if value >= 1_000.0 {
+        format!("{:.2} kHz", value / 1_000.0)
+    } else if value >= 10.0 {
+        format!("{:.1} Hz", value)
+    } else {
+        format!("{:.2} Hz", value)
+    }
+}
 #[allow(clippy::too_many_arguments)]
 fn param_grid(
     ui: &mut egui::Ui,
@@ -750,14 +764,22 @@ fn param_grid(
                     .map(|params| params.param_get(param_index))
                     .unwrap_or(0.0);
                 let depth = link_index.map(|index| &mut cell.mods[index].depth);
-                let default_value = (definition.min + definition.max) * 0.5;
-                let output = Knob::new(&mut value, definition.min, definition.max)
+                let rate = is_rate(definition.name) && definition.min > 0.0;
+                let default_value = if rate {
+                    (definition.min * definition.max).sqrt()
+                } else {
+                    (definition.min + definition.max) * 0.5
+                };
+                let mut knob = Knob::new(&mut value, definition.min, definition.max)
                     .accent(accent)
                     .label(definition.name)
                     .default(default_value)
                     .bipolar(center_detented(definition.name))
-                    .depth(depth)
-                    .ui(ui);
+                    .depth(depth);
+                if rate {
+                    knob = knob.log().formatter(hz_text);
+                }
+                let output = knob.ui(ui);
                 let geometry = &mut geom[slot];
                 if geometry.mod_input_count < MAX_MOD_PARAMS {
                     geometry.mod_inputs[geometry.mod_input_count] = output.mod_pos;

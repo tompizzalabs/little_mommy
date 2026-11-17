@@ -268,7 +268,9 @@ pub fn preview_noise(
 ) {
     let mut state = NoiseState::default();
     state.seed(seed.wrapping_mul(NOISE_PREVIEW_SEED_MIX));
-    wave_preview(ui, width, color, move |_| state.sample(noise_color));
+    wave_preview(ui, width, color, move |_| {
+        state.sample(noise_color, 20_000.0, 48_000.0)
+    });
 }
 
 pub fn preview_env(

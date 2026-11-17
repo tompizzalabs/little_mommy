@@ -280,27 +280,29 @@ pub fn browser_window(
                     .id_salt("preset_categories")
                     .max_width(160.0)
                     .show(ui, |ui| {
-                        for origin in [PresetOrigin::Community, PresetOrigin::User] {
-                            ui.label(
-                                egui::RichText::new(origin.label().to_uppercase())
-                                    .size(10.0)
-                                    .strong()
-                                    .color(th::CV),
-                            );
-                            for category in categories_of(state, origin) {
-                                let is_selected =
-                                    state.browser_category.as_ref().is_some_and(|selected| {
-                                        *selected == (origin, category.clone())
-                                    });
-                                if ui.selectable_label(is_selected, &category).clicked() {
-                                    state.browser_category = Some((origin, category));
+                        ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
+                            for origin in [PresetOrigin::Community, PresetOrigin::User] {
+                                ui.label(
+                                    egui::RichText::new(origin.label().to_uppercase())
+                                        .size(10.0)
+                                        .strong()
+                                        .color(th::CV),
+                                );
+                                for category in categories_of(state, origin) {
+                                    let is_selected =
+                                        state.browser_category.as_ref().is_some_and(|selected| {
+                                            *selected == (origin, category.clone())
+                                        });
+                                    if ui.selectable_label(is_selected, &category).clicked() {
+                                        state.browser_category = Some((origin, category));
+                                    }
                                 }
+                                ui.add_space(6.0);
                             }
-                            ui.add_space(6.0);
-                        }
-                        if ui.button("REFRESH").clicked() {
-                            state.rescan();
-                        }
+                            if ui.button("REFRESH").clicked() {
+                                state.rescan();
+                            }
+                        });
                     });
                 ui.separator();
                 egui::ScrollArea::vertical()
@@ -308,27 +310,29 @@ pub fn browser_window(
                     .show(ui, |ui| {
                         let entries: Vec<PresetEntry> =
                             entries_in(state).into_iter().cloned().collect();
-                        for entry in entries {
-                            let entry = entry.clone();
-                            let author = if entry.author.is_empty() {
-                                String::from("-")
-                            } else {
-                                entry.author.clone()
-                            };
-                            let is_current = state
-                                .current
-                                .as_ref()
-                                .is_some_and(|current| current.path == entry.path);
-                            if ui
-                                .selectable_label(
-                                    is_current,
-                                    format!("{}  -  {}", entry.name, author),
-                                )
-                                .clicked()
-                            {
-                                state.load_entry(&entry, patch, positions, selected, scene_rect);
+                        ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
+                            for entry in entries {
+                                let author = if entry.author.is_empty() {
+                                    String::from("-")
+                                } else {
+                                    entry.author.clone()
+                                };
+                                let is_current = state
+                                    .current
+                                    .as_ref()
+                                    .is_some_and(|current| current.path == entry.path);
+                                if ui
+                                    .selectable_label(
+                                        is_current,
+                                        format!("{}  -  {}", entry.name, author),
+                                    )
+                                    .clicked()
+                                {
+                                    state
+                                        .load_entry(&entry, patch, positions, selected, scene_rect);
+                                }
                             }
-                        }
+                        });
                     });
             });
         });
