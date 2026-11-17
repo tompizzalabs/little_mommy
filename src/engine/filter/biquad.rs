@@ -81,8 +81,15 @@ impl Resonator {
     }
 
     fn recalculate_coefficients(&mut self, sample_rate: f32) {
-        let coefficient = -2.0 * self.radius * (self.frequency * std::f32::consts::TAU / sample_rate).cos();
-        self.biquad.set_coefficients(coefficient, self.radius * self.radius, RESONATOR_GAIN_FACTOR, 0.0, -RESONATOR_GAIN_FACTOR);
+        let coefficient =
+            -2.0 * self.radius * (self.frequency * std::f32::consts::TAU / sample_rate).cos();
+        self.biquad.set_coefficients(
+            coefficient,
+            self.radius * self.radius,
+            RESONATOR_GAIN_FACTOR,
+            0.0,
+            -RESONATOR_GAIN_FACTOR,
+        );
     }
 
     pub fn process(&mut self, input: f32) -> f32 {

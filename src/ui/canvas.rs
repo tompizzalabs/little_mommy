@@ -4,6 +4,8 @@ use super::shape;
 use super::state::{DragState, MAX_MOD_PARAMS, NodeGeom, ensure_scratch};
 use super::theme::{self as th, BODY_W, Glyph, HEADER_H, NODE_W, PAD};
 use super::widgets::{KIND_LIST, kind_label};
+use crate::engine::effects::DistortionAlgorithm;
+use crate::engine::filter::FilterKind;
 use crate::engine::graph::{InputSel, ModLink, Patch};
 use crate::engine::lfo::LfoShape;
 use crate::engine::node::{NodeKind, NodeParams, ParamDef};
@@ -19,6 +21,33 @@ const HIT_MOD_SQ: f32 = 64.0;
 const HIT_PORT_SQ: f32 = 121.0;
 
 const VOICE_OPTIONS: [(u8, &str); 5] = [(1, "1"), (2, "2"), (4, "4"), (8, "8"), (16, "16")];
+
+const FILTER_LADDER_OPTIONS: [(FilterKind, &str); 6] = [
+    (FilterKind::Ladder4LowPass, "LP4"),
+    (FilterKind::Ladder2LowPass, "LP2"),
+    (FilterKind::Ladder4BandPass, "BP4"),
+    (FilterKind::Ladder2BandPass, "BP2"),
+    (FilterKind::Ladder4HighPass, "HP4"),
+    (FilterKind::Ladder2HighPass, "HP2"),
+];
+
+const FILTER_OTHER_OPTIONS: [(FilterKind, &str); 7] = [
+    (FilterKind::Sem, "SEM"),
+    (FilterKind::Korg35LowPass, "K35L"),
+    (FilterKind::Korg35HighPass, "K35H"),
+    (FilterKind::Diode, "DIODE"),
+    (FilterKind::Formant, "FORM"),
+    (FilterKind::Comb, "COMB"),
+    (FilterKind::StateVariable, "SVF"),
+];
+
+const DISTORTION_ALGORITHM_OPTIONS: [(DistortionAlgorithm, &str); 5] = [
+    (DistortionAlgorithm::Clamp, "CLAMP"),
+    (DistortionAlgorithm::Fold, "FOLD"),
+    (DistortionAlgorithm::Zero, "ZERO"),
+    (DistortionAlgorithm::Sine, "SINE"),
+    (DistortionAlgorithm::Cube, "CUBE"),
+];
 
 const STACK_OPTIONS: [(unison::StackMode, &str); 4] = [
     (unison::StackMode::Unison, "UNI"),
@@ -959,6 +988,27 @@ fn kind_controls(
             ..
         } => {
             preview::preview_env(ui, BODY_W, accent, *attack, *decay, *sustain, *release);
+        }
+        NodeParams::Filter { kind, .. } => {
+            knob::section_label(ui, "LADDER");
+            *dirty |= knob::segmented(ui, "filter_ladder", kind, &FILTER_LADDER_OPTIONS, accent);
+            knob::section_label(ui, "VOICING");
+            *dirty |= knob::segmented(ui, "filter_other", kind, &FILTER_OTHER_OPTIONS, accent);
+        }
+        NodeParams::Delay { ping_pong, .. } => {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing = vec2(4.0, 0.0);
+                *dirty |= knob::chip(ui, "delay_ping_pong", ping_pong, "PING PONG", accent);
+            });
+        }
+        NodeParams::Distortion { algorithm, .. } => {
+            *dirty |= knob::segmented(
+                ui,
+                "distortion_algorithm",
+                algorithm,
+                &DISTORTION_ALGORITHM_OPTIONS,
+                accent,
+            );
         }
         _ => {}
     }

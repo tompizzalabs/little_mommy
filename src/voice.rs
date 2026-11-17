@@ -355,6 +355,154 @@ impl Voice {
                     let value = state.lfo(*shape, rate, phase, sample_rate);
                     (value, value)
                 }
+                NodeParams::Delay { .. } => {
+                    let delay_time = modulated(&node.params, links, mod_values, 0);
+                    let feedback = modulated(&node.params, links, mod_values, 1);
+                    let dry = modulated(&node.params, links, mod_values, 2);
+                    let wet = modulated(&node.params, links, mod_values, 3);
+                    let ducking = modulated(&node.params, links, mod_values, 4);
+                    if let NodeParams::Delay { ping_pong, .. } = &node.params {
+                        state.delay(
+                            first_input_left,
+                            first_input_right,
+                            delay_time,
+                            feedback,
+                            dry,
+                            wet,
+                            ducking,
+                            *ping_pong,
+                            sample_rate,
+                        )
+                    } else {
+                        (0.0, 0.0)
+                    }
+                }
+                NodeParams::Chorus { .. } => {
+                    let rate = modulated(&node.params, links, mod_values, 0);
+                    let amount = modulated(&node.params, links, mod_values, 1);
+                    let feedback = modulated(&node.params, links, mod_values, 2);
+                    let dry_wet = modulated(&node.params, links, mod_values, 3);
+                    (
+                        state.chorus(
+                            0,
+                            first_input_left,
+                            rate,
+                            amount,
+                            feedback,
+                            dry_wet,
+                            sample_rate,
+                        ),
+                        state.chorus(
+                            1,
+                            first_input_right,
+                            rate,
+                            amount,
+                            feedback,
+                            dry_wet,
+                            sample_rate,
+                        ),
+                    )
+                }
+                NodeParams::Flanger { .. } => {
+                    let rate = modulated(&node.params, links, mod_values, 0);
+                    let amount = modulated(&node.params, links, mod_values, 1);
+                    let feedback = modulated(&node.params, links, mod_values, 2);
+                    let dry_wet = modulated(&node.params, links, mod_values, 3);
+                    (
+                        state.flanger(
+                            0,
+                            first_input_left,
+                            rate,
+                            amount,
+                            feedback,
+                            dry_wet,
+                            sample_rate,
+                        ),
+                        state.flanger(
+                            1,
+                            first_input_right,
+                            rate,
+                            amount,
+                            feedback,
+                            dry_wet,
+                            sample_rate,
+                        ),
+                    )
+                }
+                NodeParams::Phaser { .. } => {
+                    let rate = modulated(&node.params, links, mod_values, 0);
+                    let base_frequency = modulated(&node.params, links, mod_values, 1);
+                    let amount = modulated(&node.params, links, mod_values, 2);
+                    let feedback = modulated(&node.params, links, mod_values, 3);
+                    let dry_wet = modulated(&node.params, links, mod_values, 4);
+                    state.phaser(
+                        first_input_left,
+                        first_input_right,
+                        rate,
+                        base_frequency,
+                        amount,
+                        feedback,
+                        dry_wet,
+                        sample_rate,
+                    )
+                }
+                NodeParams::Bitcrusher { .. } => {
+                    let bits = modulated(&node.params, links, mod_values, 0);
+                    let edge = modulated(&node.params, links, mod_values, 1);
+                    let dry_wet = modulated(&node.params, links, mod_values, 2);
+                    state.bitcrusher(first_input_left, first_input_right, bits, edge, dry_wet)
+                }
+                NodeParams::RingMod { .. } => {
+                    let frequency = modulated(&node.params, links, mod_values, 0);
+                    let amount = modulated(&node.params, links, mod_values, 1);
+                    state.ring_mod(
+                        first_input_left,
+                        first_input_right,
+                        frequency,
+                        amount,
+                        sample_rate,
+                    )
+                }
+                NodeParams::Distortion { .. } => {
+                    let threshold = modulated(&node.params, links, mod_values, 0);
+                    let dry_wet = modulated(&node.params, links, mod_values, 1);
+                    if let NodeParams::Distortion { algorithm, .. } = &node.params {
+                        (
+                            state.distortion(0, first_input_left, threshold, *algorithm, dry_wet),
+                            state.distortion(1, first_input_right, threshold, *algorithm, dry_wet),
+                        )
+                    } else {
+                        (0.0, 0.0)
+                    }
+                }
+                NodeParams::Equalizer { .. } => {
+                    let frequency = modulated(&node.params, links, mod_values, 0);
+                    let q = modulated(&node.params, links, mod_values, 1);
+                    let gain_db = modulated(&node.params, links, mod_values, 2);
+                    (
+                        state.equalizer(0, first_input_left, frequency, q, gain_db, sample_rate),
+                        state.equalizer(1, first_input_right, frequency, q, gain_db, sample_rate),
+                    )
+                }
+                NodeParams::Reverb { .. } => {
+                    let pre_delay = modulated(&node.params, links, mod_values, 0);
+                    let xover = modulated(&node.params, links, mod_values, 1);
+                    let low_decay = modulated(&node.params, links, mod_values, 2);
+                    let mid_decay = modulated(&node.params, links, mod_values, 3);
+                    let damping = modulated(&node.params, links, mod_values, 4);
+                    let mix = modulated(&node.params, links, mod_values, 5);
+                    state.reverb(
+                        first_input_left,
+                        first_input_right,
+                        pre_delay,
+                        xover,
+                        low_decay,
+                        mid_decay,
+                        damping,
+                        mix,
+                        sample_rate,
+                    )
+                }
                 NodeParams::Out => (first_input_left, first_input_right),
             };
 

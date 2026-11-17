@@ -1,3 +1,4 @@
+use crate::engine::effects::DistortionAlgorithm;
 use crate::engine::filter::FilterKind;
 use crate::engine::lfo::LfoShape;
 use crate::engine::osc::{
@@ -18,6 +19,15 @@ pub enum NodeKind {
     Env,
     Gain,
     Lfo,
+    Delay,
+    Chorus,
+    Flanger,
+    Phaser,
+    Bitcrusher,
+    RingMod,
+    Distortion,
+    Equalizer,
+    Reverb,
     Out,
 }
 
@@ -211,6 +221,194 @@ const LFO_DEFS: &[ParamDef] = &[
         max: 1.0,
     },
 ];
+const DELAY_DEFS: &[ParamDef] = &[
+    ParamDef {
+        name: "Time",
+        min: 0.0,
+        max: 4.0,
+    },
+    ParamDef {
+        name: "Feed",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Dry",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Wet",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Duck",
+        min: 0.0,
+        max: 1.0,
+    },
+];
+const CHORUS_DEFS: &[ParamDef] = &[
+    ParamDef {
+        name: "Rate",
+        min: 0.01,
+        max: 8.0,
+    },
+    ParamDef {
+        name: "Depth",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Feed",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Mix",
+        min: 0.0,
+        max: 1.0,
+    },
+];
+const FLANGER_DEFS: &[ParamDef] = &[
+    ParamDef {
+        name: "Rate",
+        min: 0.01,
+        max: 8.0,
+    },
+    ParamDef {
+        name: "Depth",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Feed",
+        min: -1.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Mix",
+        min: 0.0,
+        max: 1.0,
+    },
+];
+const PHASER_DEFS: &[ParamDef] = &[
+    ParamDef {
+        name: "Rate",
+        min: 0.01,
+        max: 8.0,
+    },
+    ParamDef {
+        name: "Freq",
+        min: 400.0,
+        max: 8000.0,
+    },
+    ParamDef {
+        name: "Depth",
+        min: 0.0,
+        max: 1.5,
+    },
+    ParamDef {
+        name: "Feed",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Mix",
+        min: 0.0,
+        max: 1.0,
+    },
+];
+const BITCRUSHER_DEFS: &[ParamDef] = &[
+    ParamDef {
+        name: "Bits",
+        min: 1.0,
+        max: 16.0,
+    },
+    ParamDef {
+        name: "Edge",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Mix",
+        min: 0.0,
+        max: 1.0,
+    },
+];
+const RING_MOD_DEFS: &[ParamDef] = &[
+    ParamDef {
+        name: "Freq",
+        min: 0.01,
+        max: 20000.0,
+    },
+    ParamDef {
+        name: "Amount",
+        min: 0.0,
+        max: 1.0,
+    },
+];
+const DISTORTION_DEFS: &[ParamDef] = &[
+    ParamDef {
+        name: "Thresh",
+        min: 0.0,
+        max: 1.0,
+    },
+    ParamDef {
+        name: "Mix",
+        min: 0.0,
+        max: 1.0,
+    },
+];
+const EQUALIZER_DEFS: &[ParamDef] = &[
+    ParamDef {
+        name: "Freq",
+        min: 20.0,
+        max: 20000.0,
+    },
+    ParamDef {
+        name: "Q",
+        min: 0.1,
+        max: 10.0,
+    },
+    ParamDef {
+        name: "Gain",
+        min: -24.0,
+        max: 24.0,
+    },
+];
+const REVERB_DEFS: &[ParamDef] = &[
+    ParamDef {
+        name: "Delay",
+        min: 0.02,
+        max: 0.1,
+    },
+    ParamDef {
+        name: "Xover",
+        min: 20.0,
+        max: 2000.0,
+    },
+    ParamDef {
+        name: "Rt Low",
+        min: 0.1,
+        max: 10.0,
+    },
+    ParamDef {
+        name: "Rt Mid",
+        min: 0.1,
+        max: 10.0,
+    },
+    ParamDef {
+        name: "Damp",
+        min: 100.0,
+        max: 18000.0,
+    },
+    ParamDef {
+        name: "Mix",
+        min: 0.0,
+        max: 1.0,
+    },
+];
 const EMPTY_DEFS: &[ParamDef] = &[];
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -288,6 +486,60 @@ pub enum NodeParams {
         shape: LfoShape,
         rate: f32,
         phase: f32,
+    },
+    Delay {
+        time: f32,
+        feedback: f32,
+        dry: f32,
+        wet: f32,
+        ducking: f32,
+        ping_pong: bool,
+    },
+    Chorus {
+        rate: f32,
+        amount: f32,
+        feedback: f32,
+        dry_wet: f32,
+    },
+    Flanger {
+        rate: f32,
+        amount: f32,
+        feedback: f32,
+        dry_wet: f32,
+    },
+    Phaser {
+        rate: f32,
+        base_frequency: f32,
+        amount: f32,
+        feedback: f32,
+        dry_wet: f32,
+    },
+    Bitcrusher {
+        bits: f32,
+        edge: f32,
+        dry_wet: f32,
+    },
+    RingMod {
+        frequency: f32,
+        amount: f32,
+    },
+    Distortion {
+        algorithm: DistortionAlgorithm,
+        threshold: f32,
+        dry_wet: f32,
+    },
+    Equalizer {
+        frequency: f32,
+        q: f32,
+        gain_db: f32,
+    },
+    Reverb {
+        pre_delay: f32,
+        xover: f32,
+        low_decay: f32,
+        mid_decay: f32,
+        damping: f32,
+        mix: f32,
     },
     Out,
 }
@@ -373,6 +625,60 @@ impl NodeParams {
                 rate: 2.0,
                 phase: 0.0,
             },
+            NodeKind::Delay => NodeParams::Delay {
+                time: 0.25,
+                feedback: 0.45,
+                dry: 1.0,
+                wet: 0.5,
+                ducking: 0.0,
+                ping_pong: false,
+            },
+            NodeKind::Chorus => NodeParams::Chorus {
+                rate: 0.15,
+                amount: 0.4,
+                feedback: 0.0,
+                dry_wet: 0.7,
+            },
+            NodeKind::Flanger => NodeParams::Flanger {
+                rate: 0.2,
+                amount: 0.3,
+                feedback: 0.6,
+                dry_wet: 0.7,
+            },
+            NodeKind::Phaser => NodeParams::Phaser {
+                rate: 0.5,
+                base_frequency: 4000.0,
+                amount: 0.3,
+                feedback: 0.5,
+                dry_wet: 1.0,
+            },
+            NodeKind::Bitcrusher => NodeParams::Bitcrusher {
+                bits: 8.0,
+                edge: 1.0,
+                dry_wet: 0.7,
+            },
+            NodeKind::RingMod => NodeParams::RingMod {
+                frequency: 100.0,
+                amount: 1.0,
+            },
+            NodeKind::Distortion => NodeParams::Distortion {
+                algorithm: DistortionAlgorithm::Clamp,
+                threshold: 0.5,
+                dry_wet: 1.0,
+            },
+            NodeKind::Equalizer => NodeParams::Equalizer {
+                frequency: 1000.0,
+                q: 1.0,
+                gain_db: 0.0,
+            },
+            NodeKind::Reverb => NodeParams::Reverb {
+                pre_delay: 0.04,
+                xover: 200.0,
+                low_decay: 3.0,
+                mid_decay: 2.0,
+                damping: 3000.0,
+                mix: 0.25,
+            },
             NodeKind::Out => NodeParams::Out,
         }
     }
@@ -389,6 +695,15 @@ impl NodeParams {
             NodeParams::Env { .. } => NodeKind::Env,
             NodeParams::Gain { .. } => NodeKind::Gain,
             NodeParams::Lfo { .. } => NodeKind::Lfo,
+            NodeParams::Delay { .. } => NodeKind::Delay,
+            NodeParams::Chorus { .. } => NodeKind::Chorus,
+            NodeParams::Flanger { .. } => NodeKind::Flanger,
+            NodeParams::Phaser { .. } => NodeKind::Phaser,
+            NodeParams::Bitcrusher { .. } => NodeKind::Bitcrusher,
+            NodeParams::RingMod { .. } => NodeKind::RingMod,
+            NodeParams::Distortion { .. } => NodeKind::Distortion,
+            NodeParams::Equalizer { .. } => NodeKind::Equalizer,
+            NodeParams::Reverb { .. } => NodeKind::Reverb,
             NodeParams::Out => NodeKind::Out,
         }
     }
@@ -405,6 +720,15 @@ impl NodeParams {
             NodeParams::Filter { .. }
             | NodeParams::Env { .. }
             | NodeParams::Gain { .. }
+            | NodeParams::Delay { .. }
+            | NodeParams::Chorus { .. }
+            | NodeParams::Flanger { .. }
+            | NodeParams::Phaser { .. }
+            | NodeParams::Bitcrusher { .. }
+            | NodeParams::RingMod { .. }
+            | NodeParams::Distortion { .. }
+            | NodeParams::Equalizer { .. }
+            | NodeParams::Reverb { .. }
             | NodeParams::Out => 1,
         }
     }
@@ -421,6 +745,15 @@ impl NodeParams {
             NodeKind::Env => "ENV",
             NodeKind::Gain => "GAIN",
             NodeKind::Lfo => "LFO",
+            NodeKind::Delay => "DELAY",
+            NodeKind::Chorus => "CHORUS",
+            NodeKind::Flanger => "FLANGER",
+            NodeKind::Phaser => "PHASER",
+            NodeKind::Bitcrusher => "CRUSH",
+            NodeKind::RingMod => "RINGMOD",
+            NodeKind::Distortion => "DISTORT",
+            NodeKind::Equalizer => "EQ",
+            NodeKind::Reverb => "VERB",
             NodeKind::Out => "OUT",
         }
     }
@@ -437,6 +770,15 @@ impl NodeParams {
             NodeParams::Env { .. } => ENV_DEFS,
             NodeParams::Gain { .. } => GAIN_DEFS,
             NodeParams::Lfo { .. } => LFO_DEFS,
+            NodeParams::Delay { .. } => DELAY_DEFS,
+            NodeParams::Chorus { .. } => CHORUS_DEFS,
+            NodeParams::Flanger { .. } => FLANGER_DEFS,
+            NodeParams::Phaser { .. } => PHASER_DEFS,
+            NodeParams::Bitcrusher { .. } => BITCRUSHER_DEFS,
+            NodeParams::RingMod { .. } => RING_MOD_DEFS,
+            NodeParams::Distortion { .. } => DISTORTION_DEFS,
+            NodeParams::Equalizer { .. } => EQUALIZER_DEFS,
+            NodeParams::Reverb { .. } => REVERB_DEFS,
             NodeParams::Out => EMPTY_DEFS,
         }
     }
@@ -498,6 +840,40 @@ impl NodeParams {
             (NodeParams::Gain { gain, .. }, 0) => *gain,
             (NodeParams::Lfo { rate, .. }, 0) => *rate,
             (NodeParams::Lfo { phase, .. }, 1) => *phase,
+            (NodeParams::Delay { time, .. }, 0) => *time,
+            (NodeParams::Delay { feedback, .. }, 1) => *feedback,
+            (NodeParams::Delay { dry, .. }, 2) => *dry,
+            (NodeParams::Delay { wet, .. }, 3) => *wet,
+            (NodeParams::Delay { ducking, .. }, 4) => *ducking,
+            (NodeParams::Chorus { rate, .. }, 0) => *rate,
+            (NodeParams::Chorus { amount, .. }, 1) => *amount,
+            (NodeParams::Chorus { feedback, .. }, 2) => *feedback,
+            (NodeParams::Chorus { dry_wet, .. }, 3) => *dry_wet,
+            (NodeParams::Flanger { rate, .. }, 0) => *rate,
+            (NodeParams::Flanger { amount, .. }, 1) => *amount,
+            (NodeParams::Flanger { feedback, .. }, 2) => *feedback,
+            (NodeParams::Flanger { dry_wet, .. }, 3) => *dry_wet,
+            (NodeParams::Phaser { rate, .. }, 0) => *rate,
+            (NodeParams::Phaser { base_frequency, .. }, 1) => *base_frequency,
+            (NodeParams::Phaser { amount, .. }, 2) => *amount,
+            (NodeParams::Phaser { feedback, .. }, 3) => *feedback,
+            (NodeParams::Phaser { dry_wet, .. }, 4) => *dry_wet,
+            (NodeParams::Bitcrusher { bits, .. }, 0) => *bits,
+            (NodeParams::Bitcrusher { edge, .. }, 1) => *edge,
+            (NodeParams::Bitcrusher { dry_wet, .. }, 2) => *dry_wet,
+            (NodeParams::RingMod { frequency, .. }, 0) => *frequency,
+            (NodeParams::RingMod { amount, .. }, 1) => *amount,
+            (NodeParams::Distortion { threshold, .. }, 0) => *threshold,
+            (NodeParams::Distortion { dry_wet, .. }, 1) => *dry_wet,
+            (NodeParams::Equalizer { frequency, .. }, 0) => *frequency,
+            (NodeParams::Equalizer { q, .. }, 1) => *q,
+            (NodeParams::Equalizer { gain_db, .. }, 2) => *gain_db,
+            (NodeParams::Reverb { pre_delay, .. }, 0) => *pre_delay,
+            (NodeParams::Reverb { xover, .. }, 1) => *xover,
+            (NodeParams::Reverb { low_decay, .. }, 2) => *low_decay,
+            (NodeParams::Reverb { mid_decay, .. }, 3) => *mid_decay,
+            (NodeParams::Reverb { damping, .. }, 4) => *damping,
+            (NodeParams::Reverb { mix, .. }, 5) => *mix,
             _ => 0.0,
         }
     }
@@ -559,6 +935,40 @@ impl NodeParams {
             (NodeParams::Gain { gain, .. }, 0) => *gain = value,
             (NodeParams::Lfo { rate, .. }, 0) => *rate = value,
             (NodeParams::Lfo { phase, .. }, 1) => *phase = value,
+            (NodeParams::Delay { time, .. }, 0) => *time = value,
+            (NodeParams::Delay { feedback, .. }, 1) => *feedback = value,
+            (NodeParams::Delay { dry, .. }, 2) => *dry = value,
+            (NodeParams::Delay { wet, .. }, 3) => *wet = value,
+            (NodeParams::Delay { ducking, .. }, 4) => *ducking = value,
+            (NodeParams::Chorus { rate, .. }, 0) => *rate = value,
+            (NodeParams::Chorus { amount, .. }, 1) => *amount = value,
+            (NodeParams::Chorus { feedback, .. }, 2) => *feedback = value,
+            (NodeParams::Chorus { dry_wet, .. }, 3) => *dry_wet = value,
+            (NodeParams::Flanger { rate, .. }, 0) => *rate = value,
+            (NodeParams::Flanger { amount, .. }, 1) => *amount = value,
+            (NodeParams::Flanger { feedback, .. }, 2) => *feedback = value,
+            (NodeParams::Flanger { dry_wet, .. }, 3) => *dry_wet = value,
+            (NodeParams::Phaser { rate, .. }, 0) => *rate = value,
+            (NodeParams::Phaser { base_frequency, .. }, 1) => *base_frequency = value,
+            (NodeParams::Phaser { amount, .. }, 2) => *amount = value,
+            (NodeParams::Phaser { feedback, .. }, 3) => *feedback = value,
+            (NodeParams::Phaser { dry_wet, .. }, 4) => *dry_wet = value,
+            (NodeParams::Bitcrusher { bits, .. }, 0) => *bits = value,
+            (NodeParams::Bitcrusher { edge, .. }, 1) => *edge = value,
+            (NodeParams::Bitcrusher { dry_wet, .. }, 2) => *dry_wet = value,
+            (NodeParams::RingMod { frequency, .. }, 0) => *frequency = value,
+            (NodeParams::RingMod { amount, .. }, 1) => *amount = value,
+            (NodeParams::Distortion { threshold, .. }, 0) => *threshold = value,
+            (NodeParams::Distortion { dry_wet, .. }, 1) => *dry_wet = value,
+            (NodeParams::Equalizer { frequency, .. }, 0) => *frequency = value,
+            (NodeParams::Equalizer { q, .. }, 1) => *q = value,
+            (NodeParams::Equalizer { gain_db, .. }, 2) => *gain_db = value,
+            (NodeParams::Reverb { pre_delay, .. }, 0) => *pre_delay = value,
+            (NodeParams::Reverb { xover, .. }, 1) => *xover = value,
+            (NodeParams::Reverb { low_decay, .. }, 2) => *low_decay = value,
+            (NodeParams::Reverb { mid_decay, .. }, 3) => *mid_decay = value,
+            (NodeParams::Reverb { damping, .. }, 4) => *damping = value,
+            (NodeParams::Reverb { mix, .. }, 5) => *mix = value,
             _ => {}
         }
     }

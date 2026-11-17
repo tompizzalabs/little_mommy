@@ -57,7 +57,8 @@ impl Korg35Filter {
     fn update(&mut self, cutoff: f32, resonance: f32, sample_rate: f32) {
         self.k_modded = (self.k + resonance * 2.0).clamp(RESONANCE_MIN, RESONANCE_MAX);
 
-        let warped = (2.0 * sample_rate) * (cutoff * std::f32::consts::TAU / sample_rate * 0.5).tan();
+        let warped =
+            (2.0 * sample_rate) * (cutoff * std::f32::consts::TAU / sample_rate * 0.5).tan();
         let g = warped / sample_rate * 0.5;
         let stage_gain = g / (1.0 + g);
 
@@ -66,7 +67,8 @@ impl Korg35Filter {
         self.high_pass_1.alpha = stage_gain;
         self.high_pass_2.alpha = stage_gain;
 
-        self.alpha = 1.0 / (1.0 - self.k_modded * stage_gain + self.k_modded * stage_gain * stage_gain);
+        self.alpha =
+            1.0 / (1.0 - self.k_modded * stage_gain + self.k_modded * stage_gain * stage_gain);
 
         if self.is_lowpass {
             self.low_pass_2.beta = (self.k_modded - self.k_modded * stage_gain) / (1.0 + g);
@@ -87,13 +89,15 @@ impl Korg35Filter {
         let output;
         if self.is_lowpass {
             let first = self.low_pass_1.process(input);
-            let feedback_sum = self.low_pass_2.feedback_output() + self.high_pass_1.feedback_output();
+            let feedback_sum =
+                self.low_pass_2.feedback_output() + self.high_pass_1.feedback_output();
             let stage_input = self.alpha * (first + feedback_sum);
             output = self.k_modded * self.low_pass_2.process(stage_input);
             self.high_pass_1.process(output);
         } else {
             let first = self.high_pass_1.process(input);
-            let feedback_sum = self.high_pass_2.feedback_output() + self.low_pass_1.feedback_output();
+            let feedback_sum =
+                self.high_pass_2.feedback_output() + self.low_pass_1.feedback_output();
             let stage_input = self.alpha * (first + feedback_sum);
             let scaled = self.k_modded * stage_input;
             self.low_pass_1.process(self.high_pass_2.process(scaled));
@@ -136,7 +140,10 @@ mod tests {
         for _ in 0..SAMPLE_RATE as usize {
             tail = filter.process(0.5, 500.0, 0.2, SAMPLE_RATE);
         }
-        assert!(tail.abs() > 0.1, "constant input should survive, got {tail}");
+        assert!(
+            tail.abs() > 0.1,
+            "constant input should survive, got {tail}"
+        );
     }
 
     #[test]
@@ -147,7 +154,10 @@ mod tests {
         for _ in 0..SAMPLE_RATE as usize {
             tail = filter.process(0.5, 500.0, 0.2, SAMPLE_RATE);
         }
-        assert!(tail.abs() < 0.05, "constant input should vanish, got {tail}");
+        assert!(
+            tail.abs() < 0.05,
+            "constant input should vanish, got {tail}"
+        );
     }
 
     #[test]

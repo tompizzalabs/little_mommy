@@ -83,10 +83,8 @@ impl Default for FormantFilter {
 
 impl FormantFilter {
     fn update_parabolas(&mut self, vowel_left: Vowel, vowel_right: Vowel, sample_rate: f32) {
-        self.parabola_1 =
-            parabola_coefficients(vowel_left.formants().0, vowel_right.formants().0);
-        self.parabola_2 =
-            parabola_coefficients(vowel_left.formants().1, vowel_right.formants().1);
+        self.parabola_1 = parabola_coefficients(vowel_left.formants().0, vowel_right.formants().0);
+        self.parabola_2 = parabola_coefficients(vowel_left.formants().1, vowel_right.formants().1);
         self.resonator_1.set_radius(RESONATOR_RADIUS, sample_rate);
         self.resonator_2.set_radius(RESONATOR_RADIUS, sample_rate);
     }
@@ -112,8 +110,10 @@ impl FormantFilter {
         let t = transition.clamp(0.0, 1.0);
         let [a0, b0, c0] = self.parabola_1;
         let [a1, b1, c1] = self.parabola_2;
-        self.resonator_1.set_frequency(a0 * t * t + b0 * t + c0, sample_rate);
-        self.resonator_2.set_frequency(a1 * t * t + b1 * t + c1, sample_rate);
+        self.resonator_1
+            .set_frequency(a0 * t * t + b0 * t + c0, sample_rate);
+        self.resonator_2
+            .set_frequency(a1 * t * t + b1 * t + c1, sample_rate);
 
         let output = self.resonator_1.process(self.resonator_2.process(input));
         output * OUTPUT_SCALAR
@@ -156,13 +156,11 @@ mod tests {
                 let mut filter = FormantFilter::default();
                 let mut energy = 0.0;
                 for step in 0..2_000 {
-                    let input = ((step as f32 / SAMPLE_RATE * 200.0 * std::f32::consts::TAU).sin()) * 0.5;
+                    let input =
+                        ((step as f32 / SAMPLE_RATE * 200.0 * std::f32::consts::TAU).sin()) * 0.5;
                     energy += filter.process(input, 0.5, left, right, SAMPLE_RATE).powi(2);
                 }
-                assert!(
-                    energy > 0.0,
-                    "vowel pair {left}/{right} should pass signal"
-                );
+                assert!(energy > 0.0, "vowel pair {left}/{right} should pass signal");
             }
         }
     }

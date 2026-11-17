@@ -32,22 +32,40 @@ impl BitcrusherState {
             self.discretization_scalar = 2.0f32.powi(bits_whole as i32 - 1);
         }
 
-        let left = self.crush(input_left, &mut self.left_value, edge, dry_wet);
-        let right = self.crush(input_right, &mut self.right_value, edge, dry_wet);
+        let left = crush_sample(
+            input_left,
+            &mut self.left_value,
+            self.discretization_scalar,
+            edge,
+            dry_wet,
+        );
+        let right = crush_sample(
+            input_right,
+            &mut self.right_value,
+            self.discretization_scalar,
+            edge,
+            dry_wet,
+        );
         (left, right)
-    }
-
-    fn crush(&self, input: f32, current_value: &mut f32, edge: f32, dry_wet: f32) -> f32 {
-        let target_value = (input * self.discretization_scalar).floor() / self.discretization_scalar;
-        *current_value += (target_value - *current_value) * edge.clamp(0.0, 1.0);
-        let blend = dry_wet.clamp(0.0, 1.0);
-        *current_value * blend + input * (1.0 - blend)
     }
 
     pub fn reset(&mut self) {
         self.left_value = 0.0;
         self.right_value = 0.0;
     }
+}
+
+fn crush_sample(
+    input: f32,
+    current_value: &mut f32,
+    discretization_scalar: f32,
+    edge: f32,
+    dry_wet: f32,
+) -> f32 {
+    let target_value = (input * discretization_scalar).floor() / discretization_scalar;
+    *current_value += (target_value - *current_value) * edge.clamp(0.0, 1.0);
+    let blend = dry_wet.clamp(0.0, 1.0);
+    *current_value * blend + input * (1.0 - blend)
 }
 
 #[cfg(test)]
@@ -81,6 +99,9 @@ mod tests {
     fn high_bit_depth_is_nearly_transparent() {
         let mut state = BitcrusherState::default();
         let (left, _) = state.process_stereo(0.37, 0.37, 16.0, 1.0, 1.0);
-        assert!((left - 0.37).abs() < 0.01, "16 bits should be near silent quantization, got {left}");
+        assert!(
+            (left - 0.37).abs() < 0.01,
+            "16 bits should be near silent quantization, got {left}"
+        );
     }
 }

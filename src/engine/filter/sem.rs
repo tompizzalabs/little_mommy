@@ -43,9 +43,7 @@ impl SemFilter {
         }
 
         let resonance_01 = resonance.clamp(0.0, 1.0);
-        self.resonance_modded = (24.5 * resonance_01 * resonance_01
-            * resonance_01
-            * resonance_01
+        self.resonance_modded = (24.5 * resonance_01 * resonance_01 * resonance_01 * resonance_01
             + RESONANCE_MIN)
             .clamp(RESONANCE_MIN, RESONANCE_MAX);
         let r = 1.0 / (2.0 * self.resonance_modded);
@@ -88,7 +86,10 @@ mod tests {
         for _ in 0..SAMPLE_RATE as usize {
             tail = filter.process(0.5, 500.0, 0.3, -1.0, SAMPLE_RATE);
         }
-        assert!(tail.abs() > 0.1, "constant input passes a low pass, got {tail}");
+        assert!(
+            tail.abs() > 0.1,
+            "constant input passes a low pass, got {tail}"
+        );
     }
 
     #[test]
@@ -98,7 +99,10 @@ mod tests {
         for _ in 0..SAMPLE_RATE as usize {
             tail = filter.process(0.5, 500.0, 0.3, 1.0, SAMPLE_RATE);
         }
-        assert!(tail.abs() < 0.05, "constant input dies in a high pass, got {tail}");
+        assert!(
+            tail.abs() < 0.05,
+            "constant input dies in a high pass, got {tail}"
+        );
     }
 
     #[test]

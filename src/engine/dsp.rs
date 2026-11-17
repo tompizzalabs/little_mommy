@@ -1,5 +1,9 @@
+use crate::engine::effects::{
+    BitcrusherState, ChorusState, DelayState, DistortionAlgorithm, DistortionState, FlangerState,
+    PhaserState, RingModState, ZitaReverbState,
+};
 use crate::engine::filter::{
-    CombFilter, DiodeFilter, FormantFilter, Korg35Filter, LadderFilter, SemFilter,
+    CombFilter, DiodeFilter, FormantFilter, Korg35Filter, LadderFilter, PeakingEq, SemFilter,
     StateVariableFilter,
 };
 use crate::engine::{
@@ -39,6 +43,15 @@ pub struct NodeState {
     pub formant: FormantFilter,
     pub comb: CombFilter,
     pub state_variable: StateVariableFilter,
+    pub delay: DelayState,
+    pub chorus: [ChorusState; 2],
+    pub flanger: [FlangerState; 2],
+    pub phaser: PhaserState,
+    pub bitcrusher: BitcrusherState,
+    pub ring_mod: RingModState,
+    pub distortion: [DistortionState; 2],
+    pub equalizer: [PeakingEq; 2],
+    pub reverb: ZitaReverbState,
 }
 
 impl Default for NodeState {
@@ -60,6 +73,15 @@ impl Default for NodeState {
             formant: FormantFilter::default(),
             comb: CombFilter::default(),
             state_variable: StateVariableFilter::default(),
+            delay: DelayState::default(),
+            chorus: std::array::from_fn(|_| ChorusState::default()),
+            flanger: std::array::from_fn(|_| FlangerState::default()),
+            phaser: PhaserState::default(),
+            bitcrusher: BitcrusherState::default(),
+            ring_mod: RingModState::default(),
+            distortion: std::array::from_fn(|_| DistortionState::default()),
+            equalizer: std::array::from_fn(|_| PeakingEq::default()),
+            reverb: ZitaReverbState::default(),
         }
     }
 }
@@ -128,58 +150,78 @@ impl NodeState {
             FilterKind::Ladder4LowPass => {
                 self.ladder.set_mode(LadderMode::LowPass4);
                 self.ladder.set_saturation(saturation);
-                let mono = self.ladder.process(input_left, cutoff, resonance, sample_rate);
+                let mono = self
+                    .ladder
+                    .process(input_left, cutoff, resonance, sample_rate);
                 (mono, mono)
             }
             FilterKind::Ladder2LowPass => {
                 self.ladder.set_mode(LadderMode::LowPass2);
                 self.ladder.set_saturation(saturation);
-                let mono = self.ladder.process(input_left, cutoff, resonance, sample_rate);
+                let mono = self
+                    .ladder
+                    .process(input_left, cutoff, resonance, sample_rate);
                 (mono, mono)
             }
             FilterKind::Ladder4BandPass => {
                 self.ladder.set_mode(LadderMode::BandPass4);
                 self.ladder.set_saturation(saturation);
-                let mono = self.ladder.process(input_left, cutoff, resonance, sample_rate);
+                let mono = self
+                    .ladder
+                    .process(input_left, cutoff, resonance, sample_rate);
                 (mono, mono)
             }
             FilterKind::Ladder2BandPass => {
                 self.ladder.set_mode(LadderMode::BandPass2);
                 self.ladder.set_saturation(saturation);
-                let mono = self.ladder.process(input_left, cutoff, resonance, sample_rate);
+                let mono = self
+                    .ladder
+                    .process(input_left, cutoff, resonance, sample_rate);
                 (mono, mono)
             }
             FilterKind::Ladder4HighPass => {
                 self.ladder.set_mode(LadderMode::HighPass4);
                 self.ladder.set_saturation(saturation);
-                let mono = self.ladder.process(input_left, cutoff, resonance, sample_rate);
+                let mono = self
+                    .ladder
+                    .process(input_left, cutoff, resonance, sample_rate);
                 (mono, mono)
             }
             FilterKind::Ladder2HighPass => {
                 self.ladder.set_mode(LadderMode::HighPass2);
                 self.ladder.set_saturation(saturation);
-                let mono = self.ladder.process(input_left, cutoff, resonance, sample_rate);
+                let mono = self
+                    .ladder
+                    .process(input_left, cutoff, resonance, sample_rate);
                 (mono, mono)
             }
             FilterKind::Sem => {
-                let mono = self.sem.process(input_left, cutoff, resonance, transition, sample_rate);
+                let mono = self
+                    .sem
+                    .process(input_left, cutoff, resonance, transition, sample_rate);
                 (mono, mono)
             }
             FilterKind::Korg35LowPass => {
                 self.korg35.set_lowpass();
                 self.korg35.set_saturation(saturation);
-                let mono = self.korg35.process(input_left, cutoff, resonance, sample_rate);
+                let mono = self
+                    .korg35
+                    .process(input_left, cutoff, resonance, sample_rate);
                 (mono, mono)
             }
             FilterKind::Korg35HighPass => {
                 self.korg35.set_highpass();
                 self.korg35.set_saturation(saturation);
-                let mono = self.korg35.process(input_left, cutoff, resonance, sample_rate);
+                let mono = self
+                    .korg35
+                    .process(input_left, cutoff, resonance, sample_rate);
                 (mono, mono)
             }
             FilterKind::Diode => {
                 self.diode.set_saturation(saturation);
-                let mono = self.diode.process(input_left, cutoff, resonance, sample_rate);
+                let mono = self
+                    .diode
+                    .process(input_left, cutoff, resonance, sample_rate);
                 (mono, mono)
             }
             FilterKind::Formant => {
@@ -193,7 +235,9 @@ impl NodeState {
                 (mono, mono)
             }
             FilterKind::Comb => {
-                let mono = self.comb.process(input_left, cutoff, resonance, sample_rate);
+                let mono = self
+                    .comb
+                    .process(input_left, cutoff, resonance, sample_rate);
                 (mono, mono)
             }
             FilterKind::StateVariable => self.state_variable.process_stereo(
@@ -204,6 +248,159 @@ impl NodeState {
                 sample_rate,
             ),
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn delay(
+        &mut self,
+        input_left: f32,
+        input_right: f32,
+        delay_time: f32,
+        feedback: f32,
+        dry: f32,
+        wet: f32,
+        ducking: f32,
+        ping_pong: bool,
+        sample_rate: f32,
+    ) -> (f32, f32) {
+        self.delay.process_stereo(
+            input_left,
+            input_right,
+            delay_time,
+            feedback,
+            dry,
+            wet,
+            ducking,
+            ping_pong,
+            sample_rate,
+        )
+    }
+
+    pub fn chorus(
+        &mut self,
+        channel: usize,
+        input: f32,
+        rate: f32,
+        amount: f32,
+        feedback: f32,
+        dry_wet: f32,
+        sample_rate: f32,
+    ) -> f32 {
+        self.chorus[channel].process(input, rate, amount, feedback, dry_wet, sample_rate)
+    }
+
+    pub fn flanger(
+        &mut self,
+        channel: usize,
+        input: f32,
+        rate: f32,
+        amount: f32,
+        feedback: f32,
+        dry_wet: f32,
+        sample_rate: f32,
+    ) -> f32 {
+        self.flanger[channel].process(input, rate, amount, feedback, dry_wet, sample_rate)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn phaser(
+        &mut self,
+        input_left: f32,
+        input_right: f32,
+        rate: f32,
+        base_frequency: f32,
+        amount: f32,
+        feedback: f32,
+        dry_wet: f32,
+        sample_rate: f32,
+    ) -> (f32, f32) {
+        self.phaser.process_stereo(
+            input_left,
+            input_right,
+            rate,
+            base_frequency,
+            amount,
+            feedback,
+            dry_wet,
+            sample_rate,
+        )
+    }
+
+    pub fn bitcrusher(
+        &mut self,
+        input_left: f32,
+        input_right: f32,
+        bits: f32,
+        edge: f32,
+        dry_wet: f32,
+    ) -> (f32, f32) {
+        self.bitcrusher
+            .process_stereo(input_left, input_right, bits, edge, dry_wet)
+    }
+
+    pub fn ring_mod(
+        &mut self,
+        input_left: f32,
+        input_right: f32,
+        frequency: f32,
+        amount: f32,
+        sample_rate: f32,
+    ) -> (f32, f32) {
+        self.ring_mod
+            .process_stereo(input_left, input_right, frequency, amount, sample_rate)
+    }
+
+    pub fn distortion(
+        &mut self,
+        channel: usize,
+        input: f32,
+        threshold: f32,
+        algorithm: DistortionAlgorithm,
+        dry_wet: f32,
+    ) -> f32 {
+        self.distortion[channel].process(input, threshold, algorithm, dry_wet)
+    }
+
+    pub fn equalizer(
+        &mut self,
+        channel: usize,
+        input: f32,
+        frequency: f32,
+        q: f32,
+        gain_db: f32,
+        sample_rate: f32,
+    ) -> f32 {
+        let equalizer = &mut self.equalizer[channel];
+        equalizer.set_frequency(frequency);
+        equalizer.set_q(q);
+        equalizer.set_gain_db(gain_db);
+        equalizer.process(input, sample_rate)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn reverb(
+        &mut self,
+        input_left: f32,
+        input_right: f32,
+        pre_delay: f32,
+        xover: f32,
+        low_decay: f32,
+        mid_decay: f32,
+        damping: f32,
+        mix: f32,
+        sample_rate: f32,
+    ) -> (f32, f32) {
+        self.reverb.process_stereo(
+            input_left,
+            input_right,
+            pre_delay,
+            xover,
+            low_decay,
+            mid_decay,
+            damping,
+            mix,
+            sample_rate,
+        )
     }
 
     pub fn env(

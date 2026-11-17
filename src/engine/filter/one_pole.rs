@@ -41,7 +41,8 @@ impl VaOnePole {
     }
 
     pub fn set_frequency(&mut self, frequency: f32, sample_rate: f32) {
-        let warped = (2.0 * sample_rate) * (frequency * std::f32::consts::TAU / sample_rate / 2.0).tan();
+        let warped =
+            (2.0 * sample_rate) * (frequency * std::f32::consts::TAU / sample_rate / 2.0).tan();
         let g = warped / sample_rate * 0.5;
         self.alpha = g / (1.0 + g);
     }
@@ -105,7 +106,10 @@ mod tests {
         for _ in 0..48_000 {
             tail = filter.process(0.5);
         }
-        assert!(tail.abs() < 0.01, "constant input should vanish, got {tail}");
+        assert!(
+            tail.abs() < 0.01,
+            "constant input should vanish, got {tail}"
+        );
     }
 
     #[test]

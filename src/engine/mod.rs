@@ -1,4 +1,5 @@
 pub mod dsp;
+pub mod effects;
 pub mod filter;
 pub mod graph;
 pub mod lfo;

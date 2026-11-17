@@ -240,7 +240,7 @@ fn fm_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
                 detune: 0.0,
                 amount: 0.3,
                 carrier_ratio: 1,
-                modulator_ratio: 2,
+                modulator_ratio: 16,
                 exponential: true,
                 drift: 0.0,
             },

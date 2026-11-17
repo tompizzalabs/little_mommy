@@ -73,7 +73,10 @@ mod tests {
             let (left, _) = filter.process_stereo(0.5, 0.5, 5_000.0, 0.2, SAMPLE_RATE);
             tail = left;
         }
-        assert!(tail.abs() > 0.1, "constant input should survive, got {tail}");
+        assert!(
+            tail.abs() > 0.1,
+            "constant input should survive, got {tail}"
+        );
     }
 
     #[test]

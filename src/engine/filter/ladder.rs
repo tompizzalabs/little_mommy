@@ -57,10 +57,11 @@ impl LadderFilter {
     }
 
     fn update(&mut self, cutoff: f32, resonance: f32, sample_rate: f32) {
-        let resonance_modded = (self.resonance + 4.0 * resonance.max(0.0)).clamp(0.0, RESONANCE_MAX);
+        let resonance_modded =
+            (self.resonance + 4.0 * resonance.max(0.0)).clamp(0.0, RESONANCE_MAX);
 
-        let warped = (2.0 * sample_rate)
-            * (cutoff * std::f32::consts::TAU / sample_rate * 0.5).tan();
+        let warped =
+            (2.0 * sample_rate) * (cutoff * std::f32::consts::TAU / sample_rate * 0.5).tan();
         let g = warped / sample_rate * 0.5;
         let stage_gain = g / (1.0 + g);
 
@@ -159,7 +160,10 @@ mod tests {
         for _ in 0..SAMPLE_RATE as usize {
             tail = filter.process(0.5, 500.0, 0.1, SAMPLE_RATE);
         }
-        assert!(tail.abs() < 0.05, "constant input should vanish, got {tail}");
+        assert!(
+            tail.abs() < 0.05,
+            "constant input should vanish, got {tail}"
+        );
     }
 
     #[test]
