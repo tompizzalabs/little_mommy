@@ -1,7 +1,8 @@
 # Sozvezdie ( Constellations )
 
 **Modular Node-Based Analog Synthesizer**
-<img width="1704" height="831" alt="image" src="https://github.com/user-attachments/assets/b9aaca86-6f1e-40ba-931e-22cbe9ac75e0" />
+<img width="1580" height="891" alt="image" src="https://github.com/user-attachments/assets/134da69d-eb26-42fb-ad0d-e20a4466050b" />
+
 
 ## Vision
 
