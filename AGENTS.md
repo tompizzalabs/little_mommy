@@ -32,5 +32,5 @@ The best code is code that needs no explanation.
 
 
 ```bash
-cargo nice-plug bundle little_mommy --release
+cargo nice-plug bundle sozvezdie --release
 ```

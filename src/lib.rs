@@ -211,7 +211,7 @@ impl Sozvezdie {
 }
 
 impl Plugin for Sozvezdie {
-    const NAME: &'static str = "SOZVEZDIE";
+    const NAME: &'static str = "Sozvezdie";
     const VENDOR: &'static str = "Tom Pizza Labs";
     const URL: &'static str = "https://pornhub.com";
     const EMAIL: &'static str = "iant@givinmyemail.com";
