@@ -1,8 +1,8 @@
-use super::knob::Knob;
+﻿use super::knob::Knob;
 use super::state::apply_patch;
 use super::theme as th;
 use crate::engine::graph::{Patch, PlayMode};
-use crate::params::LittleMommyParams;
+use crate::params::SozvezdieParams;
 use crate::preset_bank::{self, PresetEntry, PresetOrigin};
 use crate::presets;
 use nice_plug::context::gui::ParamSetter;
@@ -109,7 +109,7 @@ pub fn top_bar(
     scene_rect: &mut egui::Rect,
     header_state: &mut HeaderState,
     selected: &mut Option<usize>,
-    params: &Arc<LittleMommyParams>,
+    params: &Arc<SozvezdieParams>,
     setter: &ParamSetter,
 ) {
     let full = ui.available_rect_before_wrap();
@@ -133,7 +133,7 @@ pub fn top_bar(
 
     child.add_space(14.0);
     child.label(
-        egui::RichText::new("LITTLE MOMMY III")
+        egui::RichText::new("SOZVEZDIE")
             .size(13.0)
             .strong()
             .color(th::TEXT_BRIGHT),

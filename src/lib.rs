@@ -1,4 +1,4 @@
-pub mod engine;
+﻿pub mod engine;
 pub mod params;
 pub mod preset_bank;
 pub mod presets;
@@ -6,7 +6,7 @@ pub mod ui;
 pub mod voice;
 
 use engine::graph::{CompiledGraph, Patch, PlayMode};
-use params::LittleMommyParams;
+use params::SozvezdieParams;
 use voice::Voice;
 
 use nice_plug::prelude::*;
@@ -15,8 +15,8 @@ use std::sync::{Arc, Mutex};
 
 const NUM_VOICES: usize = 16;
 
-pub struct LittleMommy {
-    params: Arc<LittleMommyParams>,
+pub struct Sozvezdie {
+    params: Arc<SozvezdieParams>,
     patch: Arc<Mutex<Patch>>,
     compiled: CompiledGraph,
     compiled_version: u64,
@@ -26,12 +26,12 @@ pub struct LittleMommy {
     next_internal_voice_id: u64,
     editor_state: Arc<EguiEditorState>,
     repaint_notifier: RepaintNotifier,
-    initial_editor: Option<ui::LittleMommyEditor>,
+    initial_editor: Option<ui::SozvezdieEditor>,
 }
 
-impl Default for LittleMommy {
+impl Default for Sozvezdie {
     fn default() -> Self {
-        let params = Arc::new(LittleMommyParams::default());
+        let params = Arc::new(SozvezdieParams::default());
         let patch = params.patch.clone();
         let compiled = CompiledGraph::compile(&patch.lock().unwrap().grid.to_graph());
         let compiled_version = patch.lock().unwrap().version;
@@ -47,12 +47,12 @@ impl Default for LittleMommy {
             next_internal_voice_id: 0,
             editor_state: EguiEditorState::from_size(ui::MIN_WINDOW_SIZE, ui::INITIAL_SCALE_FACTOR),
             repaint_notifier: RepaintNotifier::new(),
-            initial_editor: Some(ui::LittleMommyEditor::new(params, patch)),
+            initial_editor: Some(ui::SozvezdieEditor::new(params, patch)),
         }
     }
 }
 
-impl LittleMommy {
+impl Sozvezdie {
     fn note_on(&mut self, note: u8, velocity: f32) {
         self.held_notes.retain(|held| *held != note);
         self.held_notes.push(note);
@@ -210,8 +210,8 @@ impl LittleMommy {
     }
 }
 
-impl Plugin for LittleMommy {
-    const NAME: &'static str = "Little Mommy III";
+impl Plugin for Sozvezdie {
+    const NAME: &'static str = "SOZVEZDIE";
     const VENDOR: &'static str = "Tom Pizza Labs";
     const URL: &'static str = "https://pornhub.com";
     const EMAIL: &'static str = "iant@givinmyemail.com";
@@ -226,7 +226,7 @@ impl Plugin for LittleMommy {
     const MIDI_INPUT: MidiConfig = MidiConfig::Basic;
     const SAMPLE_ACCURATE_AUTOMATION: bool = true;
 
-    type Editor = EguiEditor<ui::LittleMommyEditor>;
+    type Editor = EguiEditor<ui::SozvezdieEditor>;
     type SysExMessage = ();
     type BackgroundTask = ();
 
@@ -332,8 +332,8 @@ impl Plugin for LittleMommy {
     }
 }
 
-impl ClapPlugin for LittleMommy {
-    const CLAP_ID: &'static str = "com.TomPizzaLabs.LittleMommyIII";
+impl ClapPlugin for Sozvezdie {
+    const CLAP_ID: &'static str = "com.TomPizzaLabs.Sozvezdie";
     const CLAP_DESCRIPTION: Option<&'static str> = Some("Modular node-based synthesizer");
     const CLAP_MANUAL_URL: Option<&'static str> = Some(Self::URL);
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
@@ -344,8 +344,8 @@ impl ClapPlugin for LittleMommy {
     ];
 }
 
-impl Vst3Plugin for LittleMommy {
-    const VST3_CLASS_ID: [u8; 16] = *b"LittleMommyIII00";
+impl Vst3Plugin for Sozvezdie {
+    const VST3_CLASS_ID: [u8; 16] = *b"Sozvezdie0000000";
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[
         Vst3SubCategory::Instrument,
         Vst3SubCategory::Synth,
@@ -353,5 +353,5 @@ impl Vst3Plugin for LittleMommy {
     ];
 }
 
-nice_export_clap!(LittleMommy);
-nice_export_vst3!(LittleMommy);
+nice_export_clap!(Sozvezdie);
+nice_export_vst3!(Sozvezdie);

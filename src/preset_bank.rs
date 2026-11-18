@@ -48,14 +48,14 @@ pub struct PresetEntry {
 pub fn preset_root() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     return std::env::var_os("APPDATA")
-        .map(|base| PathBuf::from(base).join("LittleMommy").join("Presets"));
+        .map(|base| PathBuf::from(base).join("Sozvezdie").join("Presets"));
 
     #[cfg(target_os = "macos")]
     return std::env::var_os("HOME").map(|base| {
         PathBuf::from(base)
             .join("Library")
             .join("Application Support")
-            .join("LittleMommy")
+            .join("Sozvezdie")
             .join("Presets")
     });
 
@@ -63,7 +63,7 @@ pub fn preset_root() -> Option<PathBuf> {
     return std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))
-        .map(|base| base.join("little-mommy").join("Presets"));
+        .map(|base| base.join("sozvezdie").join("Presets"));
 }
 
 pub fn sanitize_file_name(raw: &str) -> String {
@@ -230,8 +230,7 @@ mod tests {
 
     #[test]
     fn save_then_scan_then_load_round_trips() {
-        let root =
-            std::env::temp_dir().join(format!("little_mommy_bank_test_{}", fastrand::u64(..)));
+        let root = std::env::temp_dir().join(format!("sozvezdie_bank_test_{}", fastrand::u64(..)));
         let patch = sample_patch();
         let saved_path =
             save_preset(&root, "Pads", "Test Pad", "Tester", &patch).expect("saving should work");
@@ -254,8 +253,7 @@ mod tests {
 
     #[test]
     fn empty_name_is_rejected() {
-        let root =
-            std::env::temp_dir().join(format!("little_mommy_bank_test_{}", fastrand::u64(..)));
+        let root = std::env::temp_dir().join(format!("sozvezdie_bank_test_{}", fastrand::u64(..)));
         assert!(save_preset(&root, "Pads", "   ", "Tester", &sample_patch()).is_err());
         fs::remove_dir_all(&root).ok();
     }

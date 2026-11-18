@@ -991,19 +991,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 
 [[package]]
-name = "little_mommy"
-version = "0.1.0"
-dependencies = [
- "atomic_float",
- "egui",
- "fastrand",
- "nice-plug",
- "nice-plug-egui",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1896,6 +1883,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd538fb6910ac1099850255cf94a94df6551fbdd602454387d0adb2d1ca6dead"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "sozvezdie"
+version = "0.1.0"
+dependencies = [
+ "atomic_float",
+ "egui",
+ "fastrand",
+ "nice-plug",
+ "nice-plug-egui",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

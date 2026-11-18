@@ -1,4 +1,4 @@
-mod canvas;
+﻿mod canvas;
 mod header;
 mod knob;
 mod preview;
@@ -8,7 +8,7 @@ mod theme;
 mod widgets;
 
 use crate::engine::graph::Patch;
-use crate::params::LittleMommyParams;
+use crate::params::SozvezdieParams;
 use nice_plug::context::gui::GuiContext;
 use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::prelude::*;
@@ -108,9 +108,9 @@ fn apply_theme(ctx: &egui::Context) {
     ctx.set_theme(egui::Theme::Dark);
 }
 
-pub struct LittleMommyEditor {
+pub struct SozvezdieEditor {
     open_state: Option<OpenEditorState>,
-    params: Arc<LittleMommyParams>,
+    params: Arc<SozvezdieParams>,
     patch: Arc<Mutex<Patch>>,
     positions: Vec<egui::Pos2>,
     geom: Vec<NodeGeom>,
@@ -122,8 +122,8 @@ pub struct LittleMommyEditor {
     context_menu_world: Option<egui::Pos2>,
 }
 
-impl LittleMommyEditor {
-    pub fn new(params: Arc<LittleMommyParams>, patch: Arc<Mutex<Patch>>) -> Self {
+impl SozvezdieEditor {
+    pub fn new(params: Arc<SozvezdieParams>, patch: Arc<Mutex<Patch>>) -> Self {
         let mut positions = Vec::new();
         let mut geom = Vec::new();
         let scene_rect = {
@@ -148,7 +148,7 @@ impl LittleMommyEditor {
     }
 }
 
-impl NiceEguiApp for LittleMommyEditor {
+impl NiceEguiApp for SozvezdieEditor {
     fn build(
         &mut self,
         egui_ctx: egui::Context,
@@ -226,8 +226,8 @@ impl NiceEguiApp for LittleMommyEditor {
 pub fn build_editor(
     editor_state: Arc<EguiEditorState>,
     repaint: RepaintNotifier,
-    editor: LittleMommyEditor,
-) -> Option<EguiEditor<LittleMommyEditor>> {
+    editor: SozvezdieEditor,
+) -> Option<EguiEditor<SozvezdieEditor>> {
     create_egui_editor(
         editor_state,
         repaint,
