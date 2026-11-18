@@ -1,15 +1,11 @@
-# Little Mommy III
+# Sozvezdie ( Constellations )
 
 **Modular Node-Based Analog Synthesizer**
 <img width="1704" height="831" alt="image" src="https://github.com/user-attachments/assets/b9aaca86-6f1e-40ba-931e-22cbe9ac75e0" />
 
-# WARNING
-If you make **Big Daddy V** in response to this synth,
-I'll break your ribs and ass bone ( not a threat )
-
 ## Vision
 
-Analog Monster, that can let you do absolut crazy shiii
+Analog Monster, that can let you do absolute crazy shiii
 
 ( To people who never used nodes they might seem intimidating, but they're actually not! )
 
@@ -20,7 +16,7 @@ Would be amazing to also have sampler and granular stuff
 Requires [cargo-nice-plug](https://codeberg.org/RustAudio/nice-plug).
 
 ```bash
-cargo nice-plug bundle little_mommy --release
+cargo nice-plug bundle sozvezdie --release
 ```
 
 ## Credits
