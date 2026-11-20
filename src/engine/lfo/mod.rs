@@ -103,6 +103,15 @@ impl std::fmt::Display for LfoShape {
     }
 }
 
+pub const DEFAULT_TEMPO_BPM: f64 = 120.0;
+
+const BEATS_PER_WHOLE_NOTE: f32 = 4.0;
+
+pub fn synced_rate_hz(bpm: f64, note_division: u8) -> f32 {
+    let beats_per_cycle = BEATS_PER_WHOLE_NOTE / note_division.max(1) as f32;
+    (bpm.max(0.0) / 60.0) as f32 / beats_per_cycle
+}
+
 #[derive(Debug, Clone)]
 pub struct LfoState {
     pub read_index: f32,
@@ -182,5 +191,41 @@ fn sample_table(shape: LfoShape, position: f32) -> f32 {
             let table = &LFO_TABLES[shape.table_index().unwrap_or(0)];
             table[first_index] + (table[next_index] - table[first_index]) * fraction
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn synced_rate_tracks_tempo_and_division() {
+        assert!(
+            (synced_rate_hz(120.0, 4) - 2.0).abs() < 1e-5,
+            "1/4 at 120 BPM is two cycles per second, got {}",
+            synced_rate_hz(120.0, 4)
+        );
+        assert!(
+            (synced_rate_hz(120.0, 1) - 0.5).abs() < 1e-5,
+            "1/1 at 120 BPM is one cycle per bar, got {}",
+            synced_rate_hz(120.0, 1)
+        );
+        assert!(
+            (synced_rate_hz(120.0, 16) - 8.0).abs() < 1e-5,
+            "1/16 at 120 BPM is eight cycles per second, got {}",
+            synced_rate_hz(120.0, 16)
+        );
+        assert!(
+            (synced_rate_hz(90.0, 4) - 1.5).abs() < 1e-5,
+            "1/4 at 90 BPM is 1.5 cycles per second, got {}",
+            synced_rate_hz(90.0, 4)
+        );
+    }
+
+    #[test]
+    fn synced_rate_stays_safe_for_odd_input() {
+        assert_eq!(synced_rate_hz(0.0, 4), 0.0);
+        assert_eq!(synced_rate_hz(-10.0, 4), 0.0);
+        assert_eq!(synced_rate_hz(120.0, 0), synced_rate_hz(120.0, 1));
     }
 }

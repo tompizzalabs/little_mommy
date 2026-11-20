@@ -112,6 +112,9 @@ fn lfo(shape: LfoShape, rate: f32) -> NodeParams {
         shape,
         rate,
         phase: 0.0,
+        tempo_sync: false,
+        note_division: 4,
+        retrigger_on_play: false,
     }
 }
 

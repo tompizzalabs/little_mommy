@@ -89,6 +89,17 @@ const OPERATOR_WAVE_OPTIONS: [(OperatorWave, &str); 3] = [
     (OperatorWave::Sine, "SIN"),
 ];
 
+const LFO_SYNC_OPTIONS: [(bool, &str); 2] = [(false, "HZ"), (true, "BPM")];
+
+const LFO_DIVISION_OPTIONS: [(u8, &str); 6] = [
+    (1, "1/1"),
+    (2, "1/2"),
+    (4, "1/4"),
+    (8, "1/8"),
+    (16, "1/16"),
+    (32, "1/32"),
+];
+
 struct PaletteEntry {
     kind: NodeKind,
     accent: Color32,
@@ -747,6 +758,13 @@ fn param_grid(
     geom: &mut [NodeGeom],
     dirty: &mut bool,
 ) {
+    let lfo_in_bpm_mode = matches!(
+        cell.params,
+        Some(NodeParams::Lfo {
+            tempo_sync: true,
+            ..
+        })
+    );
     for chunk in defs.chunks(4) {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
@@ -755,6 +773,9 @@ fn param_grid(
                     .iter()
                     .position(|candidate| std::ptr::eq(candidate, definition))
                     .unwrap_or(chunk_index);
+                if lfo_in_bpm_mode && param_index == 0 {
+                    continue;
+                }
                 let link_index = cell
                     .mods
                     .iter()
@@ -879,9 +900,28 @@ fn kind_controls(
             }
             preview::preview_noise(ui, BODY_W, accent, *color, slot as u32);
         }
-        NodeParams::Lfo { shape, .. } => {
+        NodeParams::Lfo {
+            shape,
+            tempo_sync,
+            note_division,
+            retrigger_on_play,
+            ..
+        } => {
             *dirty |= shape::wave_shape_picker(ui, "lfo_shape", shape, &LfoShape::ALL, accent);
             preview::preview_lfo(ui, BODY_W, accent, *shape);
+            knob::section_label(ui, "TEMPO SYNC");
+            *dirty |= knob::segmented(ui, "lfo_sync_mode", tempo_sync, &LFO_SYNC_OPTIONS, accent);
+            if *tempo_sync {
+                knob::section_label(ui, "NOTE LENGTH");
+                *dirty |= knob::segmented(
+                    ui,
+                    "lfo_note_division",
+                    note_division,
+                    &LFO_DIVISION_OPTIONS,
+                    accent,
+                );
+            }
+            *dirty |= knob::chip(ui, "lfo_retrig_on_play", retrigger_on_play, "RETRIG ON PLAY", accent);
         }
         NodeParams::Fm {
             carrier_wave,

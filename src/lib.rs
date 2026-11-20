@@ -6,6 +6,7 @@ pub mod ui;
 pub mod voice;
 
 use engine::graph::{CompiledGraph, Patch, PlayMode};
+use engine::lfo::DEFAULT_TEMPO_BPM;
 use params::SozvezdieParams;
 use voice::Voice;
 
@@ -24,6 +25,7 @@ pub struct Sozvezdie {
     held_notes: Vec<u8>,
     voices: [Option<Voice>; NUM_VOICES],
     next_internal_voice_id: u64,
+    transport_was_playing: bool,
     editor_state: Arc<EguiEditorState>,
     repaint_notifier: RepaintNotifier,
     initial_editor: Option<ui::SozvezdieEditor>,
@@ -45,6 +47,7 @@ impl Default for Sozvezdie {
             held_notes: Vec::new(),
             voices: std::array::from_fn(|_| None),
             next_internal_voice_id: 0,
+            transport_was_playing: false,
             editor_state: EguiEditorState::from_size(ui::MIN_WINDOW_SIZE, ui::INITIAL_SCALE_FACTOR),
             repaint_notifier: RepaintNotifier::new(),
             initial_editor: Some(ui::SozvezdieEditor::new(params, patch)),
@@ -274,7 +277,15 @@ impl Plugin for Sozvezdie {
             }
         }
 
-        let sample_rate = context.transport().sample_rate;
+        let transport = context.transport();
+        let sample_rate = transport.sample_rate;
+        let host_bpm = transport.tempo.unwrap_or(DEFAULT_TEMPO_BPM);
+        if transport.playing && !self.transport_was_playing {
+            for voice in self.voices.iter_mut().flatten() {
+                voice.retrigger_lfos(&self.compiled);
+            }
+        }
+        self.transport_was_playing = transport.playing;
         let mut next_event = context.next_event();
 
         for (sample_id, channel_samples) in buffer.iter_samples().enumerate() {
@@ -308,7 +319,7 @@ impl Plugin for Sozvezdie {
             let mut mixed_left = 0.0;
             let mut mixed_right = 0.0;
             for slot in self.voices.iter_mut().filter_map(|slot| slot.as_mut()) {
-                let (voice_left, voice_right) = slot.render(&self.compiled, sample_rate);
+                let (voice_left, voice_right) = slot.render(&self.compiled, sample_rate, host_bpm);
                 mixed_left += voice_left;
                 mixed_right += voice_right;
             }

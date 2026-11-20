@@ -238,8 +238,6 @@ pub fn build_editor(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn fixed_rect_window_fills_the_given_rect_with_stretching_content() {
         let ctx = egui::Context::default();

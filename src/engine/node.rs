@@ -428,6 +428,12 @@ const REVERB_DEFS: &[ParamDef] = &[
 ];
 const EMPTY_DEFS: &[ParamDef] = &[];
 
+const DEFAULT_LFO_NOTE_DIVISION: u8 = 4;
+
+fn default_lfo_note_division() -> u8 {
+    DEFAULT_LFO_NOTE_DIVISION
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum NodeParams {
     Analog {
@@ -509,6 +515,12 @@ pub enum NodeParams {
         shape: LfoShape,
         rate: f32,
         phase: f32,
+        #[serde(default)]
+        tempo_sync: bool,
+        #[serde(default = "default_lfo_note_division")]
+        note_division: u8,
+        #[serde(default)]
+        retrigger_on_play: bool,
     },
     Delay {
         time: f32,
@@ -705,6 +717,9 @@ impl NodeParams {
                 shape: LfoShape::Sine,
                 rate: 2.0,
                 phase: 0.0,
+                tempo_sync: false,
+                note_division: DEFAULT_LFO_NOTE_DIVISION,
+                retrigger_on_play: false,
             },
             NodeKind::Delay => NodeParams::Delay {
                 time: 0.25,

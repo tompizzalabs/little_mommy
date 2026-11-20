@@ -1,5 +1,6 @@
 use crate::engine::dsp::{EnvStage, NodeState, cent_ratio, semitone_ratio};
 use crate::engine::graph::{CompiledGraph, ModLink};
+use crate::engine::lfo::synced_rate_hz;
 use crate::engine::node::NodeParams;
 use crate::engine::osc::unison::UnisonConfig;
 use crate::engine::osc::{SyncIn, SyncMode, SyncOut};
@@ -200,7 +201,12 @@ impl Voice {
         self.releasing && !self.env_active
     }
 
-    pub fn render(&mut self, compiled: &CompiledGraph, sample_rate: f32) -> (f32, f32) {
+    pub fn render(
+        &mut self,
+        compiled: &CompiledGraph,
+        sample_rate: f32,
+        host_bpm: f64,
+    ) -> (f32, f32) {
         if compiled.nodes.is_empty() {
             return (0.0, 0.0);
         }
@@ -398,8 +404,17 @@ impl Voice {
                     let gain = modulated(&node.params, links, mod_values, 0);
                     (first_input_left * gain, first_input_right * gain)
                 }
-                NodeParams::Lfo { shape, .. } => {
-                    let rate = modulated(&node.params, links, mod_values, 0);
+                NodeParams::Lfo {
+                    shape,
+                    tempo_sync,
+                    note_division,
+                    ..
+                } => {
+                    let rate = if *tempo_sync {
+                        synced_rate_hz(host_bpm, *note_division)
+                    } else {
+                        modulated(&node.params, links, mod_values, 0)
+                    };
                     let phase = modulated(&node.params, links, mod_values, 1);
                     let value = state.lfo(*shape, rate, phase, sample_rate);
                     (value, value)
@@ -586,6 +601,21 @@ impl Voice {
             state.env_stage = crate::engine::dsp::EnvStage::Attack;
             state.env_value = 0.0;
             state.retrigger_unison();
+        }
+    }
+
+    pub fn retrigger_lfos(&mut self, compiled: &CompiledGraph) {
+        for (slot, node) in compiled.nodes.iter().enumerate() {
+            let matches = matches!(
+                node.params,
+                NodeParams::Lfo {
+                    retrigger_on_play: true,
+                    ..
+                }
+            );
+            if matches && let Some(state) = self.states.get_mut(slot) {
+                state.lfo.read_index = 0.0;
+            }
         }
     }
 }
