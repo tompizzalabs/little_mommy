@@ -84,9 +84,10 @@ pub fn apply_patch(
     scene_rect: &mut egui::Rect,
     replacement: Patch,
 ) {
+    let next_version = patch.version.wrapping_add(1);
     let cell_count = replacement.grid.cells.len();
     *patch = replacement;
-    patch.version = patch.version.wrapping_add(1);
+    patch.version = next_version;
     *selected = None;
     if positions.len() < cell_count {
         positions.resize(cell_count, egui::Pos2::ZERO);
@@ -181,5 +182,32 @@ pub fn auto_layout(patch: &Patch, positions: &mut [egui::Pos2]) {
         column_rows[column] += 1;
         let y = LAYOUT_Y0 + row_index * LAYOUT_ROW_H - (total_in_column - 1.0) * 0.5 * LAYOUT_ROW_H;
         positions[slot] = egui::pos2(LAYOUT_X0 + column as f32 * LAYOUT_COL_W, y.max(40.0));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::graph::Grid;
+
+    #[test]
+    fn apply_patch_keeps_version_increasing_regardless_of_replacement() {
+        let mut patch = Patch::new(Grid::new());
+        let mut positions = Vec::new();
+        let mut selected = None;
+        let mut scene_rect = egui::Rect::NOTHING;
+
+        for _ in 0..3 {
+            let previous = patch.version;
+            apply_patch(
+                &mut patch,
+                &mut positions,
+                &mut selected,
+                &mut scene_rect,
+                Patch::new(Grid::new()),
+            );
+            assert!(patch.version > previous);
+            assert_eq!(patch.version, previous + 1);
+        }
     }
 }
