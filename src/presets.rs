@@ -115,9 +115,9 @@ fn lfo(shape: LfoShape, rate: f32) -> NodeParams {
     }
 }
 
-fn cutoff_sweep(source: u32, depth: f32) -> (usize, ModLink) {
+fn cutoff_sweep(target: usize, source: u32, depth: f32) -> (usize, ModLink) {
     (
-        1,
+        target,
         ModLink {
             param: 0,
             source,
@@ -169,7 +169,7 @@ fn init_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn pluck_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+fn wu_wei_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
@@ -217,7 +217,7 @@ fn pluck_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn pad_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+fn valley_spirit_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
@@ -289,7 +289,7 @@ fn pad_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn bass_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+fn uncarved_block_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
@@ -332,7 +332,7 @@ fn bass_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn fm_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+fn gateless_gate_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
@@ -371,7 +371,7 @@ fn fm_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn vector_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+fn super_chocolatte_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
@@ -420,7 +420,7 @@ fn vector_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn dream_pluck_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+fn butterfly_dream_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
@@ -440,7 +440,7 @@ fn dream_pluck_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn crystal_pluck_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+fn moon_in_still_water_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
@@ -460,7 +460,7 @@ fn crystal_pluck_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn neon_dusk_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+fn river_of_stars_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
@@ -481,11 +481,11 @@ fn neon_dusk_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn neon_dusk_mods() -> Vec<(usize, ModLink)> {
-    vec![cutoff_sweep(1, 0.3)]
+fn river_of_stars_mods() -> Vec<(usize, ModLink)> {
+    vec![cutoff_sweep(2, 1, 0.3)]
 }
 
-fn chrome_dreams_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+fn ten_thousand_things_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
@@ -518,11 +518,11 @@ fn chrome_dreams_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn chrome_dreams_mods() -> Vec<(usize, ModLink)> {
-    vec![cutoff_sweep(3, 0.35)]
+fn ten_thousand_things_mods() -> Vec<(usize, ModLink)> {
+    vec![cutoff_sweep(4, 3, 0.35)]
 }
 
-fn miami_mist_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+fn baboo_fish_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
@@ -553,7 +553,7 @@ fn miami_mist_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn nightdrive_bass_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+fn autumn_flood_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
@@ -573,37 +573,7 @@ fn nightdrive_bass_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn cyber_pulse_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
-    vec![
-        (
-            0,
-            analog_stack(AnalogShape::Saw, -12.0, 0.0, 0.2, 2, 0.1, 0.0),
-            InputSel::None,
-            InputSel::None,
-        ),
-        (
-            1,
-            lfo(LfoShape::Triangle, 3.5),
-            InputSel::None,
-            InputSel::None,
-        ),
-        (2, low_pass(950.0, 0.45), InputSel::Slot(0), InputSel::None),
-        (
-            3,
-            envelope(2.0, 160.0, 0.55, 120.0),
-            InputSel::Slot(2),
-            InputSel::None,
-        ),
-        (4, level(0.65), InputSel::Slot(3), InputSel::None),
-        (5, NodeParams::Out, InputSel::Slot(4), InputSel::None),
-    ]
-}
-
-fn cyber_pulse_mods() -> Vec<(usize, ModLink)> {
-    vec![cutoff_sweep(1, 0.12)]
-}
-
-fn glass_keys_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+fn jade_gate_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
@@ -632,7 +602,7 @@ fn glass_keys_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn dream_celeste_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+fn pipes_of_heaven_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
@@ -668,7 +638,7 @@ fn dream_celeste_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn vapor_lead_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+fn riding_the_wind_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
@@ -688,7 +658,7 @@ fn vapor_lead_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     ]
 }
 
-fn mermaid_bells_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
+fn river_goddess_cells() -> Vec<(usize, NodeParams, InputSel, InputSel)> {
     vec![
         (
             0,
@@ -728,130 +698,122 @@ pub fn factory_presets() -> Vec<Preset> {
             play_mode: PlayMode::Poly,
         },
         Preset {
-            name: "Pluck",
+            name: "Wu Wei",
             author: AUTHOR,
             category: "Plucks",
-            cells: pluck_cells(),
+            cells: wu_wei_cells(),
             mods: Vec::new(),
             play_mode: PlayMode::Poly,
         },
         Preset {
-            name: "Dream Pluck",
+            name: "Butterfly Dream",
             author: AUTHOR,
             category: "Plucks",
-            cells: dream_pluck_cells(),
+            cells: butterfly_dream_cells(),
             mods: Vec::new(),
             play_mode: PlayMode::Poly,
         },
         Preset {
-            name: "Crystal Pluck",
+            name: "Moon in Still Water",
             author: AUTHOR,
             category: "Plucks",
-            cells: crystal_pluck_cells(),
+            cells: moon_in_still_water_cells(),
             mods: Vec::new(),
             play_mode: PlayMode::Poly,
         },
         Preset {
-            name: "Pad",
+            name: "Valley Spirit",
             author: AUTHOR,
             category: "Pads",
-            cells: pad_cells(),
+            cells: valley_spirit_cells(),
             mods: Vec::new(),
             play_mode: PlayMode::Poly,
         },
         Preset {
-            name: "Neon Dusk",
+            name: "River of Stars",
             author: AUTHOR,
             category: "Pads",
-            cells: neon_dusk_cells(),
-            mods: neon_dusk_mods(),
+            cells: river_of_stars_cells(),
+            mods: river_of_stars_mods(),
             play_mode: PlayMode::Poly,
         },
         Preset {
-            name: "Chrome Dreams",
+            name: "Ten Thousand Things",
             author: AUTHOR,
             category: "Pads",
-            cells: chrome_dreams_cells(),
-            mods: chrome_dreams_mods(),
+            cells: ten_thousand_things_cells(),
+            mods: ten_thousand_things_mods(),
             play_mode: PlayMode::Poly,
         },
         Preset {
-            name: "Miami Mist",
+            name: "Baboo Fish",
             author: AUTHOR,
             category: "Pads",
-            cells: miami_mist_cells(),
+            cells: baboo_fish_cells(),
             mods: Vec::new(),
             play_mode: PlayMode::Poly,
         },
         Preset {
-            name: "Bass",
+            name: "Uncarved Block",
             author: AUTHOR,
             category: "Basses",
-            cells: bass_cells(),
+            cells: uncarved_block_cells(),
             mods: Vec::new(),
             play_mode: PlayMode::MonoLegato,
         },
         Preset {
-            name: "Nightdrive Bass",
+            name: "Autumn Flood",
             author: AUTHOR,
             category: "Basses",
-            cells: nightdrive_bass_cells(),
+            cells: autumn_flood_cells(),
             mods: Vec::new(),
             play_mode: PlayMode::MonoLegato,
         },
         Preset {
-            name: "Cyber Pulse",
-            author: AUTHOR,
-            category: "Basses",
-            cells: cyber_pulse_cells(),
-            mods: cyber_pulse_mods(),
-            play_mode: PlayMode::MonoRetrig,
-        },
-        Preset {
-            name: "FM Bells",
+            name: "Gateless Gate",
             author: AUTHOR,
             category: "Keys",
-            cells: fm_cells(),
+            cells: gateless_gate_cells(),
             mods: Vec::new(),
             play_mode: PlayMode::Poly,
         },
         Preset {
-            name: "Glass Keys",
+            name: "Jade Gate",
             author: AUTHOR,
             category: "Keys",
-            cells: glass_keys_cells(),
+            cells: jade_gate_cells(),
             mods: Vec::new(),
             play_mode: PlayMode::Poly,
         },
         Preset {
-            name: "Dream Celeste",
+            name: "Pipes of Heaven",
             author: AUTHOR,
             category: "Keys",
-            cells: dream_celeste_cells(),
+            cells: pipes_of_heaven_cells(),
             mods: Vec::new(),
             play_mode: PlayMode::Poly,
         },
         Preset {
-            name: "Vector",
+            name: "Super Chocolatte",
             author: AUTHOR,
             category: "Misc",
-            cells: vector_cells(),
+            cells: super_chocolatte_cells(),
             mods: Vec::new(),
             play_mode: PlayMode::Poly,
         },
         Preset {
-            name: "Vapor Lead",
+            name: "Riding the Wind",
             author: AUTHOR,
             category: "Misc",
-            cells: vapor_lead_cells(),
+            cells: riding_the_wind_cells(),
             mods: Vec::new(),
             play_mode: PlayMode::Poly,
         },
         Preset {
-            name: "Mermaid Bells",
+            name: "River Goddess",
             author: AUTHOR,
             category: "Misc",
-            cells: mermaid_bells_cells(),
+            cells: river_goddess_cells(),
             mods: Vec::new(),
             play_mode: PlayMode::Poly,
         },
@@ -898,6 +860,28 @@ mod tests {
                         .iter()
                         .any(|(cell_slot, _, _, _)| cell_slot == slot),
                     "{} mod targets empty slot {slot}",
+                    preset.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn mod_link_sources_are_occupied_other_cells() {
+        for preset in factory_presets() {
+            for (slot, link) in &preset.mods {
+                let source = link.source as usize;
+                assert!(
+                    source != *slot,
+                    "{} mod link in slot {slot} targets itself and gets dropped",
+                    preset.name
+                );
+                assert!(
+                    preset
+                        .cells
+                        .iter()
+                        .any(|(cell_slot, _, _, _)| cell_slot == &source),
+                    "{} mod source {source} is an empty slot",
                     preset.name
                 );
             }

@@ -269,15 +269,22 @@ pub fn browser_window(
         return;
     }
     let mut open = state.browser_open;
+    let screen = ui.max_rect();
+    let margin = 8.0;
+    let browser_rect = egui::Rect::from_min_max(
+        screen.min + egui::vec2(margin, margin),
+        screen.max - egui::vec2(margin, margin),
+    );
     egui::Window::new("PRESET BROWSER")
         .open(&mut open)
-        .default_width(480.0)
-        .default_height(360.0)
+        .collapsible(false)
+        .fixed_rect(browser_rect)
         .show(ui, |ui| {
             state.ensure_listing();
-            ui.horizontal(|ui| {
+            ui.horizontal_top(|ui| {
                 egui::ScrollArea::vertical()
                     .id_salt("preset_categories")
+                    .auto_shrink(false)
                     .max_width(160.0)
                     .show(ui, |ui| {
                         ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
@@ -307,36 +314,61 @@ pub fn browser_window(
                 ui.separator();
                 egui::ScrollArea::vertical()
                     .id_salt("preset_list")
+                    .auto_shrink(false)
                     .show(ui, |ui| {
                         let entries: Vec<PresetEntry> =
                             entries_in(state).into_iter().cloned().collect();
-                        ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
-                            for entry in entries {
-                                let author = if entry.author.is_empty() {
-                                    String::from("-")
-                                } else {
-                                    entry.author.clone()
-                                };
-                                let is_current = state
-                                    .current
-                                    .as_ref()
-                                    .is_some_and(|current| current.path == entry.path);
-                                if ui
-                                    .selectable_label(
-                                        is_current,
-                                        format!("{}  -  {}", entry.name, author),
-                                    )
-                                    .clicked()
-                                {
-                                    state
-                                        .load_entry(&entry, patch, positions, selected, scene_rect);
-                                }
+                        let entries_per_column = entries.len().div_ceil(2);
+                        ui.columns(2, |columns| {
+                            for (column_index, column) in columns.iter_mut().enumerate() {
+                                column.with_layout(
+                                    egui::Layout::top_down_justified(egui::Align::LEFT),
+                                    |ui| {
+                                        for entry in entries
+                                            .iter()
+                                            .skip(column_index * entries_per_column)
+                                            .take(entries_per_column)
+                                        {
+                                            preset_list_entry(
+                                                ui, state, entry, patch, positions, selected,
+                                                scene_rect,
+                                            );
+                                        }
+                                    },
+                                );
                             }
                         });
                     });
             });
         });
     state.browser_open = open;
+}
+
+#[allow(clippy::too_many_arguments)]
+fn preset_list_entry(
+    ui: &mut egui::Ui,
+    state: &mut HeaderState,
+    entry: &PresetEntry,
+    patch: &mut Patch,
+    positions: &mut Vec<egui::Pos2>,
+    selected: &mut Option<usize>,
+    scene_rect: &mut egui::Rect,
+) {
+    let author = if entry.author.is_empty() {
+        String::from("-")
+    } else {
+        entry.author.clone()
+    };
+    let is_current = state
+        .current
+        .as_ref()
+        .is_some_and(|current| current.path == entry.path);
+    if ui
+        .selectable_label(is_current, format!("{}  -  {}", entry.name, author))
+        .clicked()
+    {
+        state.load_entry(entry, patch, positions, selected, scene_rect);
+    }
 }
 
 fn categories_of(state: &HeaderState, origin: PresetOrigin) -> Vec<String> {

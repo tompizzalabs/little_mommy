@@ -1,4 +1,6 @@
 We are making a Node-based Analog Synthesizer in Rust with nice-plug
+https://codeberg.org/RustAudio/nice-plug
+Dig thus repo for examples when needed
 
 ## Code Philosophy — Human First
 

@@ -235,3 +235,43 @@ pub fn build_editor(
         editor,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fixed_rect_window_fills_the_given_rect_with_stretching_content() {
+        let ctx = egui::Context::default();
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 900.0));
+        let input = egui::RawInput {
+            screen_rect: Some(screen),
+            ..Default::default()
+        };
+        let browser_rect =
+            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1024.0, 644.0));
+        let browser_id = egui::Id::unique("preset_browser_test");
+        let output = ctx.run_ui(input, |ui| {
+            egui::Window::new("PRESET BROWSER")
+                .id(browser_id)
+                .fixed_rect(browser_rect)
+                .show(ui, |ui| {
+                    ui.horizontal_top(|ui| {
+                        egui::ScrollArea::vertical()
+                            .auto_shrink(false)
+                            .max_width(160.0)
+                            .show(ui, |ui| ui.label("categories"));
+                        ui.separator();
+                        egui::ScrollArea::vertical()
+                            .auto_shrink(false)
+                            .show(ui, |ui| ui.label("presets"));
+                    });
+                });
+        });
+        output.drop_without_applying_deltas();
+        let actual = ctx
+            .memory(|memory| memory.area_rect(browser_id))
+            .expect("browser window should be registered");
+        assert_eq!(actual.size(), browser_rect.size());
+    }
+}

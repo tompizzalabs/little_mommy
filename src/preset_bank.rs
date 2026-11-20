@@ -82,7 +82,7 @@ pub fn install_community_presets() -> io::Result<()> {
         return Ok(());
     };
     let community = root.join(COMMUNITY_DIR);
-    fs::create_dir_all(&community)?;
+    let mut installed_paths: Vec<PathBuf> = Vec::new();
     for preset in presets::factory_presets() {
         let category_dir = community.join(preset.category);
         fs::create_dir_all(&category_dir)?;
@@ -91,6 +91,7 @@ pub fn install_community_presets() -> io::Result<()> {
             sanitize_file_name(preset.name)
         ));
         if path.exists() {
+            installed_paths.push(path);
             continue;
         }
         let file = PresetFile {
@@ -101,6 +102,27 @@ pub fn install_community_presets() -> io::Result<()> {
             patch: preset.into_patch(),
         };
         write_file(&path, &file)?;
+        installed_paths.push(path);
+    }
+    prune_stale_community_files(&community, &installed_paths)
+}
+
+fn prune_stale_community_files(community: &Path, installed_paths: &[PathBuf]) -> io::Result<()> {
+    let category_dirs = match fs::read_dir(community) {
+        Ok(dirs) => dirs,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    for category_dir in category_dirs.flatten() {
+        let files = fs::read_dir(category_dir.path())?;
+        for file in files.flatten() {
+            let path = file.path();
+            if path.extension().is_some_and(|extension| extension == PRESET_EXTENSION)
+                && !installed_paths.contains(&path)
+            {
+                fs::remove_file(&path)?;
+            }
+        }
     }
     Ok(())
 }
@@ -256,5 +278,24 @@ mod tests {
         let root = std::env::temp_dir().join(format!("sozvezdie_bank_test_{}", fastrand::u64(..)));
         assert!(save_preset(&root, "Pads", "   ", "Tester", &sample_patch()).is_err());
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn stale_community_files_are_pruned() {
+        let root = std::env::temp_dir().join(format!("sozvezdie_bank_test_{}", fastrand::u64(..)));
+        let community = root.join(COMMUNITY_DIR);
+        let category = community.join("Basses");
+        fs::create_dir_all(&category).expect("category dir should be created");
+        let installed = category.join("Kept_Preset.lmp");
+        fs::write(&installed, "{}").expect("installed preset should be written");
+        let stale = category.join("Cyber_Pulse.lmp");
+        fs::write(&stale, "{}").expect("stale preset should be written");
+
+        prune_stale_community_files(&community, std::slice::from_ref(&installed))
+            .expect("prune should work");
+
+        assert!(installed.exists());
+        assert!(!stale.exists());
+        fs::remove_dir_all(&root).expect("cleanup should work");
     }
 }

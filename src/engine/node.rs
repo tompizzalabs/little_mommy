@@ -814,6 +814,10 @@ impl NodeParams {
         }
     }
 
+    pub fn has_audio_output(&self) -> bool {
+        !matches!(self, NodeParams::Lfo { .. })
+    }
+
     pub fn label(&self) -> &'static str {
         match self.kind() {
             NodeKind::Analog => "ANALOG",

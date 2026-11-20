@@ -401,18 +401,16 @@ pub fn canvas(
                         if !geometry.valid || patch.grid.cells[slot].params.is_none() {
                             continue;
                         }
-                        let inputs = patch.grid.cells[slot]
-                            .params
-                            .as_ref()
-                            .unwrap()
-                            .input_count();
-                        for port in 0..inputs {
+                        let params = patch.grid.cells[slot].params.as_ref().unwrap();
+                        for port in 0..params.input_count() {
                             if geometry.audio_in(port).distance_sq(hover_position) < HIT_PORT_SQ {
                                 hovered_port = Some((slot, port, true));
                                 break 'ports;
                             }
                         }
-                        if geometry.audio_out().distance_sq(hover_position) < HIT_PORT_SQ {
+                        if params.has_audio_output()
+                            && geometry.audio_out().distance_sq(hover_position) < HIT_PORT_SQ
+                        {
                             hovered_port = Some((slot, 0, false));
                             break 'ports;
                         }
@@ -582,7 +580,8 @@ pub fn canvas(
                     continue;
                 }
                 let cell = &patch.grid.cells[slot];
-                let inputs = cell.params.as_ref().unwrap().input_count();
+                let params = cell.params.as_ref().unwrap();
+                let inputs = params.input_count();
                 let accent = th::accent_for(cell.params.as_ref());
                 for port in 0..inputs {
                     let hot = hovered_port == Some((slot, port, true));
@@ -594,13 +593,15 @@ pub fn canvas(
                         false,
                     );
                 }
-                th::port(
-                    &painter,
-                    geometry.audio_out(),
-                    accent,
-                    hovered_port == Some((slot, 0, false)),
-                    true,
-                );
+                if params.has_audio_output() {
+                    th::port(
+                        &painter,
+                        geometry.audio_out(),
+                        accent,
+                        hovered_port == Some((slot, 0, false)),
+                        true,
+                    );
+                }
                 th::port(
                     &painter,
                     geometry.mod_out(),
