@@ -53,6 +53,7 @@ impl Default for DelayState {
 }
 
 impl DelayState {
+    #[allow(clippy::too_many_arguments)]
     pub fn process_stereo(
         &mut self,
         input_left: f32,

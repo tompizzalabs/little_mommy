@@ -1,4 +1,4 @@
-﻿use super::knob::Knob;
+use super::knob::Knob;
 use super::state::apply_patch;
 use super::theme as th;
 use crate::engine::graph::{Patch, PlayMode};
@@ -9,6 +9,7 @@ use nice_plug::context::gui::ParamSetter;
 use nice_plug::prelude::Param;
 use std::sync::Arc;
 
+#[derive(Default)]
 pub struct HeaderState {
     pub listing: Vec<PresetEntry>,
     pub listing_valid: bool,
@@ -20,23 +21,6 @@ pub struct HeaderState {
     pub save_category: String,
     pub save_author: String,
     pub save_status: Option<String>,
-}
-
-impl Default for HeaderState {
-    fn default() -> Self {
-        Self {
-            listing: Vec::new(),
-            listing_valid: false,
-            current: None,
-            browser_open: false,
-            browser_category: None,
-            save_open: false,
-            save_name: String::new(),
-            save_category: String::new(),
-            save_author: String::new(),
-            save_status: None,
-        }
-    }
 }
 
 impl HeaderState {

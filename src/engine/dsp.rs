@@ -348,6 +348,7 @@ impl NodeState {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn chorus(
         &mut self,
         channel: usize,
@@ -361,6 +362,7 @@ impl NodeState {
         self.chorus[channel].process(input, rate, amount, feedback, dry_wet, sample_rate)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn flanger(
         &mut self,
         channel: usize,

@@ -606,14 +606,14 @@ impl Voice {
 
     pub fn retrigger_lfos(&mut self, compiled: &CompiledGraph) {
         for (slot, node) in compiled.nodes.iter().enumerate() {
-            let matches = matches!(
+            if matches!(
                 node.params,
                 NodeParams::Lfo {
                     retrigger_on_play: true,
                     ..
                 }
-            );
-            if matches && let Some(state) = self.states.get_mut(slot) {
+            ) && let Some(state) = self.states.get_mut(slot)
+            {
                 state.lfo.read_index = 0.0;
             }
         }

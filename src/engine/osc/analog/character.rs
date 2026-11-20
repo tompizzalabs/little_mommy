@@ -122,6 +122,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn precision_model_is_tighter_than_discrete() {
         assert!(PRECISION_SPEC.drift_cents < DISCRETE_SPEC.drift_cents);
         assert!(PRECISION_SPEC.period_jitter < DISCRETE_SPEC.period_jitter);

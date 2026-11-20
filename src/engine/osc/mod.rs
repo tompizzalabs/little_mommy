@@ -8,6 +8,8 @@ pub mod pm;
 pub mod unison;
 pub mod vector;
 
+#[cfg(test)]
+mod golden;
 pub use analog::{AnalogShape, AnalogVoiceState, OscillatorModel, SyncIn, SyncMode, SyncOut};
 pub use drift::{DRIFT_RANGE_SEMITONES, DriftGenerator};
 pub use fm::{EXP_FM_SEMITONES, FmState, pitch_shift_multiplier};

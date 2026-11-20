@@ -23,7 +23,7 @@ impl Preset {
         }
         for (slot, link) in &self.mods {
             if let Some(cell) = patch.grid.cells.get_mut(*slot) {
-                cell.mods.push(link.clone());
+                cell.mods.push(*link);
             }
         }
         patch.play_mode = self.play_mode;

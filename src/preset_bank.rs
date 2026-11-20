@@ -117,7 +117,9 @@ fn prune_stale_community_files(community: &Path, installed_paths: &[PathBuf]) ->
         let files = fs::read_dir(category_dir.path())?;
         for file in files.flatten() {
             let path = file.path();
-            if path.extension().is_some_and(|extension| extension == PRESET_EXTENSION)
+            if path
+                .extension()
+                .is_some_and(|extension| extension == PRESET_EXTENSION)
                 && !installed_paths.contains(&path)
             {
                 fs::remove_file(&path)?;

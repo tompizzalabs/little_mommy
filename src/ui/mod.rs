@@ -1,4 +1,4 @@
-﻿mod canvas;
+mod canvas;
 mod header;
 mod knob;
 mod preview;
@@ -246,8 +246,7 @@ mod tests {
             screen_rect: Some(screen),
             ..Default::default()
         };
-        let browser_rect =
-            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1024.0, 644.0));
+        let browser_rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1024.0, 644.0));
         let browser_id = egui::Id::unique("preset_browser_test");
         let output = ctx.run_ui(input, |ui| {
             egui::Window::new("PRESET BROWSER")

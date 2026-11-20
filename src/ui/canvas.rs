@@ -765,14 +765,11 @@ fn param_grid(
             ..
         })
     );
-    for chunk in defs.chunks(4) {
+    for (chunk_start, chunk) in defs.chunks(4).enumerate() {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
             for (chunk_index, definition) in chunk.iter().enumerate() {
-                let param_index = defs
-                    .iter()
-                    .position(|candidate| std::ptr::eq(candidate, definition))
-                    .unwrap_or(chunk_index);
+                let param_index = chunk_start * 4 + chunk_index;
                 if lfo_in_bpm_mode && param_index == 0 {
                     continue;
                 }
@@ -921,7 +918,13 @@ fn kind_controls(
                     accent,
                 );
             }
-            *dirty |= knob::chip(ui, "lfo_retrig_on_play", retrigger_on_play, "RETRIG ON PLAY", accent);
+            *dirty |= knob::chip(
+                ui,
+                "lfo_retrig_on_play",
+                retrigger_on_play,
+                "RETRIG ON PLAY",
+                accent,
+            );
         }
         NodeParams::Fm {
             carrier_wave,

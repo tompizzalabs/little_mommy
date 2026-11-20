@@ -28,6 +28,7 @@ impl PhaserChannel {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn process(
         &mut self,
         input: f32,
@@ -90,6 +91,7 @@ impl Default for PhaserState {
 }
 
 impl PhaserState {
+    #[allow(clippy::too_many_arguments)]
     pub fn process_stereo(
         &mut self,
         input_left: f32,

@@ -1,16 +1,16 @@
 const THRESHOLD_MIN: f32 = 0.05;
 const THRESHOLD_SMOOTHING: f32 = 0.998;
-const DOWNSAMPLER_INPUT_GAIN: f32 = 0.019966841051093;
+const DOWNSAMPLER_INPUT_GAIN: f32 = 0.019_966_84;
 const DOWNSAMPLER_FEEDBACK: [f32; 9] = [
     -0.0003977153,
-    -0.0064474617,
-    -0.0476997403,
-    -0.2185829743,
-    -0.6649234123,
-    -1.4773657709,
-    -2.2721421641,
-    -2.6598673212,
-    -1.8755960587,
+    -0.006_447_462,
+    -0.047_699_742,
+    -0.218_582_97,
+    -0.664_923_4,
+    -1.477_365_7,
+    -2.272_142_2,
+    -2.659_867_3,
+    -1.875_596,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -115,8 +115,8 @@ impl DistortionState {
             .clamp(THRESHOLD_MIN, 1.0);
 
         let mut upsampled = [
-            0.66666666 * self.last_input + 0.33333333 * input,
-            0.33333333 * self.last_input + 0.66666666 * input,
+            0.666_666_7 * self.last_input + 0.33333333 * input,
+            0.33333333 * self.last_input + 0.666_666_7 * input,
             input,
         ];
         self.last_input = input;

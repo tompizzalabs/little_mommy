@@ -99,7 +99,7 @@ fn build_slope_kernel() -> [f32; KERNEL_TAPS] {
     }
     let residual = slope[KERNEL_TAPS - 1];
     for slot in slope.iter_mut() {
-        *slot -= residual as f32;
+        *slot -= residual;
     }
     slope
 }
@@ -112,7 +112,7 @@ fn minimum_phase_kernel() -> [f64; KERNEL_TAPS] {
     let cutoff = TAU * BAND_EDGE / KERNEL_OVERSAMPLING as f64;
     let centre = taps as f64 / 2.0;
     let mut sum = 0.0f64;
-    for index in 0..=taps {
+    for (index, slot) in real.iter_mut().enumerate().take(taps + 1) {
         let distance = index as f64 - centre;
         let sinc = if distance == 0.0 {
             cutoff
@@ -120,7 +120,7 @@ fn minimum_phase_kernel() -> [f64; KERNEL_TAPS] {
             (cutoff * distance).sin() / distance
         };
         let value = sinc * blackman_harris(index as f64 / taps as f64);
-        real[index] = value;
+        *slot = value;
         sum += value;
     }
     for slot in real.iter_mut() {
@@ -129,16 +129,18 @@ fn minimum_phase_kernel() -> [f64; KERNEL_TAPS] {
 
     transform(&mut real, &mut imaginary, false);
     let mut cepstrum = [0.0f64; FFT_SIZE];
-    for index in 0..FFT_SIZE {
-        cepstrum[index] = real[index].hypot(imaginary[index]).max(1e-14).ln();
+    for ((cepstrum_slot, real_value), imaginary_value) in
+        cepstrum.iter_mut().zip(&real).zip(&imaginary)
+    {
+        *cepstrum_slot = real_value.hypot(*imaginary_value).max(1e-14).ln();
     }
     let mut cepstrum_imaginary = [0.0f64; FFT_SIZE];
     transform(&mut cepstrum, &mut cepstrum_imaginary, true);
-    for index in 1..FFT_SIZE / 2 {
-        cepstrum[index] *= 2.0;
+    for slot in &mut cepstrum[1..FFT_SIZE / 2] {
+        *slot *= 2.0;
     }
-    for index in FFT_SIZE / 2 + 1..FFT_SIZE {
-        cepstrum[index] = 0.0;
+    for slot in &mut cepstrum[FFT_SIZE / 2 + 1..] {
+        *slot = 0.0;
     }
     transform(&mut cepstrum, &mut cepstrum_imaginary, false);
     for index in 0..FFT_SIZE {

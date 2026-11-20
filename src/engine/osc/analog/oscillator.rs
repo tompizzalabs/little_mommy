@@ -322,12 +322,15 @@ impl Oscillator {
         self.previous_phase = phase_start;
 
         let mut sync_event = None;
-        if let Some(event) = sync {
-            if event.depth > 0.0 && event.time > 0.0 && event.time <= 1.0 && self.increment > 0.0 {
-                let reset_phase = (phase_start + event.time * self.increment).rem_euclid(1.0);
-                if reset_phase >= event.threshold {
-                    sync_event = Some((event, reset_phase));
-                }
+        if let Some(event) = sync
+            && event.depth > 0.0
+            && event.time > 0.0
+            && event.time <= 1.0
+            && self.increment > 0.0
+        {
+            let reset_phase = (phase_start + event.time * self.increment).rem_euclid(1.0);
+            if reset_phase >= event.threshold {
+                sync_event = Some((event, reset_phase));
             }
         }
 
